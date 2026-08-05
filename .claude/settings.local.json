@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep -noE \"#[0-9a-fA-F]{3,8}|rgba?\\\\\\([^\\)]*\\\\\\)\" \"/home/kommera/SP Project/outputs/india_rainfall_2023.html\")",
+      "Bash(sort -t: -k1 -n)",
+      "Bash(awk -F: '$1 < 1200')"
+    ]
+  }
+}
