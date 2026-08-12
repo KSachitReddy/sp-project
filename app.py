@@ -15,11 +15,12 @@ from pathlib import Path
 
 from flask import Flask, jsonify, request, send_from_directory
 
-from nc_convert import NcFormatError, build_payload, save_uploaded_nc
+from rainfall.nc_convert import NcFormatError, build_payload, save_uploaded_nc
 
 BASE_DIR = Path(__file__).parent
-OUT_DIR = BASE_DIR / "outputs"
-NC_DIR = BASE_DIR / "nc files"
+DATA_DIR = BASE_DIR / "data" / "rainfall"
+NC_DIR = BASE_DIR / "data" / "nc"
+WEB_DIR = BASE_DIR / "web"
 MAP_PAGE = "india_rainfall_2023.html"
 
 app = Flask(__name__, static_folder=None)
@@ -35,7 +36,7 @@ def _find_nc_for_year(year):
 
 @app.route("/")
 def index():
-    return send_from_directory(OUT_DIR, MAP_PAGE)
+    return send_from_directory(WEB_DIR, MAP_PAGE)
 
 
 @app.route("/api/years")
@@ -79,7 +80,7 @@ def api_convert():
             uploaded.save(tmp.name)
             tmp_path = tmp.name
 
-        nc_path, csv_path, payload = save_uploaded_nc(tmp_path, str(NC_DIR), str(OUT_DIR))
+        nc_path, csv_path, payload = save_uploaded_nc(tmp_path, str(NC_DIR), str(DATA_DIR))
     except NcFormatError as e:
         return jsonify({"error": str(e)}), 400
     except Exception:

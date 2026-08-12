@@ -3,7 +3,20 @@
     "allow": [
       "Bash(grep -noE \"#[0-9a-fA-F]{3,8}|rgba?\\\\\\([^\\)]*\\\\\\)\" \"/home/kommera/SP Project/outputs/india_rainfall_2023.html\")",
       "Bash(sort -t: -k1 -n)",
-      "Bash(awk -F: '$1 < 1200')"
+      "Bash(awk -F: '$1 < 1200')",
+      "Bash(.venv/bin/pip install *)",
+      "Bash(.venv/bin/python -c \"import requests; print\\(requests.__version__\\)\")",
+      "Bash(.venv/bin/python -c ' *)",
+      "Bash(.venv/bin/python -m py_compile download_satellite_images.py)",
+      "Bash(rm -f /tmp/test_gibs.png)",
+      "Bash(mkdir -p satellite_images/logs)",
+      "Bash(nohup .venv/bin/python -u download_satellite_images.py)",
+      "Bash(disown)",
+      "Bash(echo \"launched pid $!\")",
+      "Bash(ps -p 6912 -o pid,cmd)",
+      "Bash(pkill -f \"download_satellite_images.py\")",
+      "Bash(echo \"exit:$?\")",
+      "Bash(git add *)"
     ]
   }
 }

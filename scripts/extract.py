@@ -7,12 +7,15 @@ Land-cell mask = grid points that have at least one non-NaN value across the yea
 Ocean / no-data cells are NaN in the source and are excluded entirely.
 """
 import json
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
 import xarray as xr
 
-SRC = "/home/kommera/SP Project/nc files/RF25_ind2023_rfp25.nc"
-OUT_DIR = "/home/kommera/SP Project/outputs"
+BASE_DIR = Path(__file__).parent.parent
+SRC = BASE_DIR / "data" / "nc" / "RF25_ind2023_rfp25.nc"
+OUT_DIR = BASE_DIR / "data" / "rainfall"
 
 print("Opening dataset...")
 ds = xr.open_dataset(SRC)
