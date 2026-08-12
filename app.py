@@ -2,11 +2,14 @@
 Local server for the India Rainfall map.
 
 - Serves the interactive map page.
-- GET  /api/years        lists the years available in "nc files/" for the drawer.
-- GET  /api/year/<year>  loads one of those years onto the map.
-- POST /api/convert      validates an uploaded .nc file, saves it into
-                          "nc files/" and its CSV into "outputs/", then
-                          loads it onto the map.
+- GET  /api/years              lists the years available in "data/nc/" for the drawer.
+- GET  /api/year/<year>        loads one of those years onto the map.
+- POST /api/convert            validates an uploaded .nc file, saves it into
+                                "data/nc/" and its CSV into "data/rainfall/",
+                                then loads it onto the map.
+- GET  /api/satellite/<date>   serves that day's NASA GIBS PNG from
+                                "data/satellite/india_cloud/" (404 if the
+                                downloader never filled in that date).
 """
 import os
 import re
@@ -21,12 +24,14 @@ BASE_DIR = Path(__file__).parent
 DATA_DIR = BASE_DIR / "data" / "rainfall"
 NC_DIR = BASE_DIR / "data" / "nc"
 WEB_DIR = BASE_DIR / "web"
+SATELLITE_DIR = BASE_DIR / "data" / "satellite" / "india_cloud"
 MAP_PAGE = "india_rainfall_2023.html"
 
 app = Flask(__name__, static_folder=None)
 app.config["MAX_CONTENT_LENGTH"] = 200 * 1024 * 1024  # 200 MB upload cap
 
 YEAR_RE = re.compile(r"(19|20)\d{2}")
+DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 
 def _find_nc_for_year(year):
@@ -64,6 +69,19 @@ def api_year(year):
         return jsonify({"error": "Could not read that file."}), 500
 
     return jsonify(payload)
+
+
+@app.route("/api/satellite/<date_str>")
+def api_satellite(date_str):
+    if not DATE_RE.match(date_str):
+        return jsonify({"error": "Invalid date, expected YYYY-MM-DD."}), 400
+
+    year_dir = SATELLITE_DIR / date_str[:4]
+    filename = f"{date_str}.png"
+    if not (year_dir / filename).exists():
+        return jsonify({"error": f"No satellite image for {date_str}."}), 404
+
+    return send_from_directory(year_dir, filename)
 
 
 @app.route("/api/convert", methods=["POST"])

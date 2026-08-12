@@ -16,7 +16,12 @@
       "Bash(ps -p 6912 -o pid,cmd)",
       "Bash(pkill -f \"download_satellite_images.py\")",
       "Bash(echo \"exit:$?\")",
-      "Bash(git add *)"
+      "Bash(git add *)",
+      "Bash(.venv/bin/python -m py_compile app.py)",
+      "Bash(kill 6712 6974)",
+      "Bash(.venv/bin/python app.py)",
+      "Bash(curl -s -o /dev/null -w \"root: %{http_code}\\\\n\" http://localhost:5050/)",
+      "Bash(curl -s -o /dev/null -w \"satellite: %{http_code}\\\\n\" http://localhost:5050/api/satellite/2023-06-15)"
     ]
   }
 }
