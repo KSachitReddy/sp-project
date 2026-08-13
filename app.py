@@ -10,6 +10,9 @@ Local server for the India Rainfall map.
 - GET  /api/satellite/<date>   serves that day's NASA GIBS PNG from
                                 "data/satellite/india_cloud/" (404 if the
                                 downloader never filled in that date).
+- GET  /chat                   serves the rainfall chatbot page.
+- POST /api/chat                answers a natural-language rainfall question,
+                                given the running conversation.
 """
 import os
 import re
@@ -18,6 +21,7 @@ from pathlib import Path
 
 from flask import Flask, jsonify, request, send_from_directory
 
+from rainfall import chatbot
 from rainfall.nc_convert import NcFormatError, build_payload, save_uploaded_nc
 
 BASE_DIR = Path(__file__).parent
@@ -82,6 +86,29 @@ def api_satellite(date_str):
         return jsonify({"error": f"No satellite image for {date_str}."}), 404
 
     return send_from_directory(year_dir, filename)
+
+
+@app.route("/chat")
+def chat_page():
+    return send_from_directory(WEB_DIR, "chat.html")
+
+
+@app.route("/api/chat", methods=["POST"])
+def api_chat():
+    body = request.get_json(silent=True) or {}
+    messages = body.get("messages")
+    if not isinstance(messages, list) or not messages:
+        return jsonify({"error": "Expected a non-empty 'messages' list."}), 400
+
+    try:
+        updated_messages, reply = chatbot.chat(messages)
+    except RuntimeError as e:
+        return jsonify({"error": str(e)}), 503
+    except Exception:
+        app.logger.exception("Chat turn failed")
+        return jsonify({"error": "Something went wrong answering that — please try again."}), 500
+
+    return jsonify({"messages": chatbot.serialize_messages(updated_messages), "reply": reply})
 
 
 @app.route("/api/convert", methods=["POST"])

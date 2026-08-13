@@ -1,0 +1,935 @@
+{
+  "_comment": "Offline gazetteer of India states/UTs (represented by their capital) and major cities, used to resolve a place name to a lat/lon so the chatbot can find the nearest IMD RF25 rainfall grid cell. Coordinates are approximate city/capital locations, not administrative centroids.",
+  "places": [
+    {
+      "name": "Andhra Pradesh",
+      "type": "state",
+      "lat": 16.51,
+      "lon": 80.52,
+      "aliases": [
+        "ap"
+      ]
+    },
+    {
+      "name": "Arunachal Pradesh",
+      "type": "state",
+      "lat": 27.1,
+      "lon": 93.62,
+      "aliases": []
+    },
+    {
+      "name": "Assam",
+      "type": "state",
+      "lat": 26.14,
+      "lon": 91.77,
+      "aliases": [
+        "as"
+      ]
+    },
+    {
+      "name": "Bihar",
+      "type": "state",
+      "lat": 25.59,
+      "lon": 85.14,
+      "aliases": [
+        "br"
+      ]
+    },
+    {
+      "name": "Chhattisgarh",
+      "type": "state",
+      "lat": 21.25,
+      "lon": 81.63,
+      "aliases": [
+        "chattisgarh",
+        "cg"
+      ]
+    },
+    {
+      "name": "Goa",
+      "type": "state",
+      "lat": 15.49,
+      "lon": 73.83,
+      "aliases": []
+    },
+    {
+      "name": "Gujarat",
+      "type": "state",
+      "lat": 23.22,
+      "lon": 72.68,
+      "aliases": [
+        "gj"
+      ]
+    },
+    {
+      "name": "Haryana",
+      "type": "state",
+      "lat": 29.06,
+      "lon": 76.09,
+      "aliases": [
+        "hr"
+      ]
+    },
+    {
+      "name": "Himachal Pradesh",
+      "type": "state",
+      "lat": 31.1,
+      "lon": 77.17,
+      "aliases": [
+        "hp"
+      ]
+    },
+    {
+      "name": "Jharkhand",
+      "type": "state",
+      "lat": 23.34,
+      "lon": 85.31,
+      "aliases": [
+        "jh"
+      ]
+    },
+    {
+      "name": "Karnataka",
+      "type": "state",
+      "lat": 12.97,
+      "lon": 77.59,
+      "aliases": [
+        "ka"
+      ]
+    },
+    {
+      "name": "Kerala",
+      "type": "state",
+      "lat": 8.52,
+      "lon": 76.94,
+      "aliases": [
+        "kl"
+      ]
+    },
+    {
+      "name": "Madhya Pradesh",
+      "type": "state",
+      "lat": 23.26,
+      "lon": 77.41,
+      "aliases": [
+        "mp"
+      ]
+    },
+    {
+      "name": "Maharashtra",
+      "type": "state",
+      "lat": 19.08,
+      "lon": 72.88,
+      "aliases": [
+        "mh"
+      ]
+    },
+    {
+      "name": "Manipur",
+      "type": "state",
+      "lat": 24.82,
+      "lon": 93.94,
+      "aliases": []
+    },
+    {
+      "name": "Meghalaya",
+      "type": "state",
+      "lat": 25.57,
+      "lon": 91.88,
+      "aliases": []
+    },
+    {
+      "name": "Mizoram",
+      "type": "state",
+      "lat": 23.73,
+      "lon": 92.72,
+      "aliases": []
+    },
+    {
+      "name": "Nagaland",
+      "type": "state",
+      "lat": 25.67,
+      "lon": 94.11,
+      "aliases": []
+    },
+    {
+      "name": "Odisha",
+      "type": "state",
+      "lat": 20.3,
+      "lon": 85.82,
+      "aliases": [
+        "orissa",
+        "od",
+        "or"
+      ]
+    },
+    {
+      "name": "Punjab",
+      "type": "state",
+      "lat": 30.9,
+      "lon": 75.86,
+      "aliases": [
+        "pb"
+      ]
+    },
+    {
+      "name": "Rajasthan",
+      "type": "state",
+      "lat": 26.91,
+      "lon": 75.79,
+      "aliases": [
+        "rj"
+      ]
+    },
+    {
+      "name": "Sikkim",
+      "type": "state",
+      "lat": 27.33,
+      "lon": 88.61,
+      "aliases": []
+    },
+    {
+      "name": "Tamil Nadu",
+      "type": "state",
+      "lat": 13.08,
+      "lon": 80.27,
+      "aliases": [
+        "tamilnadu",
+        "tn"
+      ]
+    },
+    {
+      "name": "Telangana",
+      "type": "state",
+      "lat": 17.39,
+      "lon": 78.49,
+      "aliases": [
+        "ts",
+        "tg"
+      ]
+    },
+    {
+      "name": "Tripura",
+      "type": "state",
+      "lat": 23.83,
+      "lon": 91.28,
+      "aliases": []
+    },
+    {
+      "name": "Uttar Pradesh",
+      "type": "state",
+      "lat": 26.85,
+      "lon": 80.95,
+      "aliases": [
+        "up"
+      ]
+    },
+    {
+      "name": "Uttarakhand",
+      "type": "state",
+      "lat": 30.32,
+      "lon": 78.03,
+      "aliases": [
+        "uttaranchal"
+      ]
+    },
+    {
+      "name": "West Bengal",
+      "type": "state",
+      "lat": 22.57,
+      "lon": 88.36,
+      "aliases": [
+        "wb"
+      ]
+    },
+    {
+      "name": "Andaman and Nicobar Islands",
+      "type": "union_territory",
+      "lat": 11.62,
+      "lon": 92.73,
+      "aliases": [
+        "andaman",
+        "nicobar",
+        "andaman and nicobar"
+      ]
+    },
+    {
+      "name": "Chandigarh",
+      "type": "union_territory",
+      "lat": 30.74,
+      "lon": 76.79,
+      "aliases": []
+    },
+    {
+      "name": "Dadra and Nagar Haveli and Daman and Diu",
+      "type": "union_territory",
+      "lat": 20.4,
+      "lon": 72.83,
+      "aliases": [
+        "daman and diu",
+        "dadra and nagar haveli"
+      ]
+    },
+    {
+      "name": "Delhi",
+      "type": "union_territory",
+      "lat": 28.61,
+      "lon": 77.21,
+      "aliases": [
+        "new delhi",
+        "ncr"
+      ]
+    },
+    {
+      "name": "Jammu and Kashmir",
+      "type": "union_territory",
+      "lat": 34.08,
+      "lon": 74.79,
+      "aliases": [
+        "j&k",
+        "jammu & kashmir",
+        "kashmir"
+      ]
+    },
+    {
+      "name": "Ladakh",
+      "type": "union_territory",
+      "lat": 34.15,
+      "lon": 77.58,
+      "aliases": []
+    },
+    {
+      "name": "Lakshadweep",
+      "type": "union_territory",
+      "lat": 10.57,
+      "lon": 72.64,
+      "aliases": []
+    },
+    {
+      "name": "Puducherry",
+      "type": "union_territory",
+      "lat": 11.94,
+      "lon": 79.83,
+      "aliases": [
+        "pondicherry"
+      ]
+    },
+    {
+      "name": "Mumbai",
+      "type": "city",
+      "lat": 19.08,
+      "lon": 72.88,
+      "aliases": [
+        "bombay"
+      ]
+    },
+    {
+      "name": "Delhi",
+      "type": "city",
+      "lat": 28.61,
+      "lon": 77.21,
+      "aliases": [
+        "new delhi"
+      ]
+    },
+    {
+      "name": "Bengaluru",
+      "type": "city",
+      "lat": 12.97,
+      "lon": 77.59,
+      "aliases": [
+        "bangalore"
+      ]
+    },
+    {
+      "name": "Chennai",
+      "type": "city",
+      "lat": 13.08,
+      "lon": 80.27,
+      "aliases": [
+        "madras"
+      ]
+    },
+    {
+      "name": "Kolkata",
+      "type": "city",
+      "lat": 22.57,
+      "lon": 88.36,
+      "aliases": [
+        "calcutta"
+      ]
+    },
+    {
+      "name": "Hyderabad",
+      "type": "city",
+      "lat": 17.39,
+      "lon": 78.49,
+      "aliases": []
+    },
+    {
+      "name": "Pune",
+      "type": "city",
+      "lat": 18.52,
+      "lon": 73.86,
+      "aliases": [
+        "poona"
+      ]
+    },
+    {
+      "name": "Ahmedabad",
+      "type": "city",
+      "lat": 23.03,
+      "lon": 72.59,
+      "aliases": [
+        "ahmadabad"
+      ]
+    },
+    {
+      "name": "Surat",
+      "type": "city",
+      "lat": 21.17,
+      "lon": 72.83,
+      "aliases": []
+    },
+    {
+      "name": "Jaipur",
+      "type": "city",
+      "lat": 26.91,
+      "lon": 75.79,
+      "aliases": []
+    },
+    {
+      "name": "Lucknow",
+      "type": "city",
+      "lat": 26.85,
+      "lon": 80.95,
+      "aliases": []
+    },
+    {
+      "name": "Kanpur",
+      "type": "city",
+      "lat": 26.45,
+      "lon": 80.33,
+      "aliases": [
+        "cawnpore"
+      ]
+    },
+    {
+      "name": "Nagpur",
+      "type": "city",
+      "lat": 21.15,
+      "lon": 79.09,
+      "aliases": []
+    },
+    {
+      "name": "Indore",
+      "type": "city",
+      "lat": 22.72,
+      "lon": 75.86,
+      "aliases": []
+    },
+    {
+      "name": "Thane",
+      "type": "city",
+      "lat": 19.22,
+      "lon": 72.98,
+      "aliases": []
+    },
+    {
+      "name": "Bhopal",
+      "type": "city",
+      "lat": 23.26,
+      "lon": 77.41,
+      "aliases": []
+    },
+    {
+      "name": "Visakhapatnam",
+      "type": "city",
+      "lat": 17.69,
+      "lon": 83.22,
+      "aliases": [
+        "vizag",
+        "vishakhapatnam"
+      ]
+    },
+    {
+      "name": "Patna",
+      "type": "city",
+      "lat": 25.59,
+      "lon": 85.14,
+      "aliases": []
+    },
+    {
+      "name": "Vadodara",
+      "type": "city",
+      "lat": 22.31,
+      "lon": 73.19,
+      "aliases": [
+        "baroda"
+      ]
+    },
+    {
+      "name": "Ghaziabad",
+      "type": "city",
+      "lat": 28.67,
+      "lon": 77.42,
+      "aliases": []
+    },
+    {
+      "name": "Ludhiana",
+      "type": "city",
+      "lat": 30.9,
+      "lon": 75.86,
+      "aliases": []
+    },
+    {
+      "name": "Agra",
+      "type": "city",
+      "lat": 27.18,
+      "lon": 78.02,
+      "aliases": []
+    },
+    {
+      "name": "Nashik",
+      "type": "city",
+      "lat": 20.0,
+      "lon": 73.79,
+      "aliases": [
+        "nasik"
+      ]
+    },
+    {
+      "name": "Faridabad",
+      "type": "city",
+      "lat": 28.41,
+      "lon": 77.32,
+      "aliases": []
+    },
+    {
+      "name": "Meerut",
+      "type": "city",
+      "lat": 28.98,
+      "lon": 77.71,
+      "aliases": []
+    },
+    {
+      "name": "Rajkot",
+      "type": "city",
+      "lat": 22.3,
+      "lon": 70.8,
+      "aliases": []
+    },
+    {
+      "name": "Varanasi",
+      "type": "city",
+      "lat": 25.32,
+      "lon": 83.01,
+      "aliases": [
+        "banaras",
+        "kashi"
+      ]
+    },
+    {
+      "name": "Srinagar",
+      "type": "city",
+      "lat": 34.08,
+      "lon": 74.79,
+      "aliases": []
+    },
+    {
+      "name": "Amritsar",
+      "type": "city",
+      "lat": 31.63,
+      "lon": 74.87,
+      "aliases": []
+    },
+    {
+      "name": "Prayagraj",
+      "type": "city",
+      "lat": 25.44,
+      "lon": 81.85,
+      "aliases": [
+        "allahabad"
+      ]
+    },
+    {
+      "name": "Coimbatore",
+      "type": "city",
+      "lat": 11.02,
+      "lon": 76.97,
+      "aliases": []
+    },
+    {
+      "name": "Jabalpur",
+      "type": "city",
+      "lat": 23.18,
+      "lon": 79.99,
+      "aliases": []
+    },
+    {
+      "name": "Gwalior",
+      "type": "city",
+      "lat": 26.22,
+      "lon": 78.18,
+      "aliases": []
+    },
+    {
+      "name": "Vijayawada",
+      "type": "city",
+      "lat": 16.51,
+      "lon": 80.65,
+      "aliases": [
+        "bezawada"
+      ]
+    },
+    {
+      "name": "Jodhpur",
+      "type": "city",
+      "lat": 26.24,
+      "lon": 73.02,
+      "aliases": []
+    },
+    {
+      "name": "Madurai",
+      "type": "city",
+      "lat": 9.93,
+      "lon": 78.12,
+      "aliases": []
+    },
+    {
+      "name": "Raipur",
+      "type": "city",
+      "lat": 21.25,
+      "lon": 81.63,
+      "aliases": []
+    },
+    {
+      "name": "Kota",
+      "type": "city",
+      "lat": 25.21,
+      "lon": 75.86,
+      "aliases": []
+    },
+    {
+      "name": "Guwahati",
+      "type": "city",
+      "lat": 26.14,
+      "lon": 91.77,
+      "aliases": []
+    },
+    {
+      "name": "Mysuru",
+      "type": "city",
+      "lat": 12.3,
+      "lon": 76.65,
+      "aliases": [
+        "mysore"
+      ]
+    },
+    {
+      "name": "Thiruvananthapuram",
+      "type": "city",
+      "lat": 8.52,
+      "lon": 76.94,
+      "aliases": [
+        "trivandrum"
+      ]
+    },
+    {
+      "name": "Bhubaneswar",
+      "type": "city",
+      "lat": 20.3,
+      "lon": 85.82,
+      "aliases": []
+    },
+    {
+      "name": "Solapur",
+      "type": "city",
+      "lat": 17.66,
+      "lon": 75.91,
+      "aliases": []
+    },
+    {
+      "name": "Hubli",
+      "type": "city",
+      "lat": 15.36,
+      "lon": 75.13,
+      "aliases": [
+        "hubballi",
+        "dharwad"
+      ]
+    },
+    {
+      "name": "Tiruchirappalli",
+      "type": "city",
+      "lat": 10.79,
+      "lon": 78.7,
+      "aliases": [
+        "trichy"
+      ]
+    },
+    {
+      "name": "Bareilly",
+      "type": "city",
+      "lat": 28.37,
+      "lon": 79.43,
+      "aliases": []
+    },
+    {
+      "name": "Aligarh",
+      "type": "city",
+      "lat": 27.88,
+      "lon": 78.08,
+      "aliases": []
+    },
+    {
+      "name": "Moradabad",
+      "type": "city",
+      "lat": 28.84,
+      "lon": 78.78,
+      "aliases": []
+    },
+    {
+      "name": "Jalandhar",
+      "type": "city",
+      "lat": 31.33,
+      "lon": 75.58,
+      "aliases": []
+    },
+    {
+      "name": "Bhilai",
+      "type": "city",
+      "lat": 21.21,
+      "lon": 81.43,
+      "aliases": []
+    },
+    {
+      "name": "Warangal",
+      "type": "city",
+      "lat": 17.98,
+      "lon": 79.6,
+      "aliases": []
+    },
+    {
+      "name": "Kochi",
+      "type": "city",
+      "lat": 9.93,
+      "lon": 76.27,
+      "aliases": [
+        "cochin",
+        "ernakulam"
+      ]
+    },
+    {
+      "name": "Cuttack",
+      "type": "city",
+      "lat": 20.47,
+      "lon": 85.88,
+      "aliases": []
+    },
+    {
+      "name": "Bikaner",
+      "type": "city",
+      "lat": 28.02,
+      "lon": 73.31,
+      "aliases": []
+    },
+    {
+      "name": "Udaipur",
+      "type": "city",
+      "lat": 24.58,
+      "lon": 73.68,
+      "aliases": []
+    },
+    {
+      "name": "Dehradun",
+      "type": "city",
+      "lat": 30.32,
+      "lon": 78.03,
+      "aliases": []
+    },
+    {
+      "name": "Rourkela",
+      "type": "city",
+      "lat": 22.25,
+      "lon": 84.85,
+      "aliases": []
+    },
+    {
+      "name": "Gorakhpur",
+      "type": "city",
+      "lat": 26.76,
+      "lon": 83.37,
+      "aliases": []
+    },
+    {
+      "name": "Nellore",
+      "type": "city",
+      "lat": 14.44,
+      "lon": 79.99,
+      "aliases": []
+    },
+    {
+      "name": "Shimla",
+      "type": "city",
+      "lat": 31.1,
+      "lon": 77.17,
+      "aliases": []
+    },
+    {
+      "name": "Mangaluru",
+      "type": "city",
+      "lat": 12.87,
+      "lon": 74.88,
+      "aliases": [
+        "mangalore"
+      ]
+    },
+    {
+      "name": "Siliguri",
+      "type": "city",
+      "lat": 26.73,
+      "lon": 88.43,
+      "aliases": []
+    },
+    {
+      "name": "Jamshedpur",
+      "type": "city",
+      "lat": 22.8,
+      "lon": 86.18,
+      "aliases": [
+        "tatanagar"
+      ]
+    },
+    {
+      "name": "Asansol",
+      "type": "city",
+      "lat": 23.68,
+      "lon": 86.97,
+      "aliases": []
+    },
+    {
+      "name": "Noida",
+      "type": "city",
+      "lat": 28.54,
+      "lon": 77.39,
+      "aliases": []
+    },
+    {
+      "name": "Gurugram",
+      "type": "city",
+      "lat": 28.46,
+      "lon": 77.03,
+      "aliases": [
+        "gurgaon"
+      ]
+    },
+    {
+      "name": "Salem",
+      "type": "city",
+      "lat": 11.66,
+      "lon": 78.15,
+      "aliases": []
+    },
+    {
+      "name": "Ajmer",
+      "type": "city",
+      "lat": 26.45,
+      "lon": 74.64,
+      "aliases": []
+    },
+    {
+      "name": "Dhanbad",
+      "type": "city",
+      "lat": 23.8,
+      "lon": 86.43,
+      "aliases": []
+    },
+    {
+      "name": "Ranchi",
+      "type": "city",
+      "lat": 23.34,
+      "lon": 85.31,
+      "aliases": []
+    },
+    {
+      "name": "Amaravati",
+      "type": "city",
+      "lat": 16.51,
+      "lon": 80.52,
+      "aliases": []
+    },
+    {
+      "name": "Itanagar",
+      "type": "city",
+      "lat": 27.1,
+      "lon": 93.62,
+      "aliases": []
+    },
+    {
+      "name": "Imphal",
+      "type": "city",
+      "lat": 24.82,
+      "lon": 93.94,
+      "aliases": []
+    },
+    {
+      "name": "Shillong",
+      "type": "city",
+      "lat": 25.57,
+      "lon": 91.88,
+      "aliases": []
+    },
+    {
+      "name": "Aizawl",
+      "type": "city",
+      "lat": 23.73,
+      "lon": 92.72,
+      "aliases": []
+    },
+    {
+      "name": "Kohima",
+      "type": "city",
+      "lat": 25.67,
+      "lon": 94.11,
+      "aliases": []
+    },
+    {
+      "name": "Agartala",
+      "type": "city",
+      "lat": 23.83,
+      "lon": 91.28,
+      "aliases": []
+    },
+    {
+      "name": "Gangtok",
+      "type": "city",
+      "lat": 27.33,
+      "lon": 88.61,
+      "aliases": []
+    },
+    {
+      "name": "Panaji",
+      "type": "city",
+      "lat": 15.49,
+      "lon": 73.83,
+      "aliases": [
+        "panjim"
+      ]
+    },
+    {
+      "name": "Gandhinagar",
+      "type": "city",
+      "lat": 23.22,
+      "lon": 72.68,
+      "aliases": []
+    },
+    {
+      "name": "Leh",
+      "type": "city",
+      "lat": 34.15,
+      "lon": 77.58,
+      "aliases": []
+    }
+  ]
+}

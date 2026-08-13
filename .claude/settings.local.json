@@ -21,7 +21,21 @@
       "Bash(kill 6712 6974)",
       "Bash(.venv/bin/python app.py)",
       "Bash(curl -s -o /dev/null -w \"root: %{http_code}\\\\n\" http://localhost:5050/)",
-      "Bash(curl -s -o /dev/null -w \"satellite: %{http_code}\\\\n\" http://localhost:5050/api/satellite/2023-06-15)"
+      "Bash(curl -s -o /dev/null -w \"satellite: %{http_code}\\\\n\" http://localhost:5050/api/satellite/2023-06-15)",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)",
+      "Bash(env)",
+      "Skill(claude-api)",
+      "Skill(claude-api:*)",
+      "Bash(ant auth *)",
+      "Bash(.venv/bin/pip list *)",
+      "Bash(mkdir -p \"/home/kommera/SP Project/data/places\")",
+      "Bash(cd \"/home/kommera/SP Project\" && cat /tmp/flask.log)",
+      "Read(//tmp/**)",
+      "Bash(ollama pull *)"
+    ],
+    "additionalDirectories": [
+      "/home/kommera/SP Project/data"
     ]
   }
 }
