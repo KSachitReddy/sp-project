@@ -11,8 +11,11 @@ Local server for the India Rainfall map.
                                 "data/satellite/india_cloud/" (404 if the
                                 downloader never filled in that date).
 - GET  /chat                   serves the rainfall chatbot page.
+- GET  /api/models             lists Ollama models already pulled locally, for the
+                                chat model picker.
 - POST /api/chat                answers a natural-language rainfall question,
-                                given the running conversation.
+                                given the running conversation and an optional
+                                'model' override.
 """
 import os
 import re
@@ -93,22 +96,41 @@ def chat_page():
     return send_from_directory(WEB_DIR, "chat.html")
 
 
+@app.route("/api/models")
+def api_models():
+    try:
+        models = chatbot.list_models()
+    except RuntimeError as e:
+        return jsonify({"error": str(e)}), 503
+    return jsonify({"models": models, "default": chatbot.MODEL})
+
+
 @app.route("/api/chat", methods=["POST"])
 def api_chat():
     body = request.get_json(silent=True) or {}
     messages = body.get("messages")
+    model = body.get("model") or None
+    compute = body.get("compute") or None
     if not isinstance(messages, list) or not messages:
         return jsonify({"error": "Expected a non-empty 'messages' list."}), 400
+    if model is not None and not isinstance(model, str):
+        return jsonify({"error": "'model' must be a string."}), 400
+    if compute not in (None, "auto", "cpu"):
+        return jsonify({"error": "'compute' must be 'auto' or 'cpu'."}), 400
 
     try:
-        updated_messages, reply = chatbot.chat(messages)
+        updated_messages, reply, images = chatbot.chat(messages, model=model, compute=compute)
     except RuntimeError as e:
         return jsonify({"error": str(e)}), 503
     except Exception:
         app.logger.exception("Chat turn failed")
         return jsonify({"error": "Something went wrong answering that — please try again."}), 500
 
-    return jsonify({"messages": chatbot.serialize_messages(updated_messages), "reply": reply})
+    return jsonify({
+        "messages": chatbot.serialize_messages(updated_messages),
+        "reply": reply,
+        "images": images,
+    })
 
 
 @app.route("/api/convert", methods=["POST"])

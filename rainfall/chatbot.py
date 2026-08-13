@@ -25,6 +25,7 @@ import pandas as pd
 BASE_DIR = Path(__file__).parent.parent
 PLACES_PATH = BASE_DIR / "data" / "places" / "india_places.json"
 RAINFALL_DIR = BASE_DIR / "data" / "rainfall"
+SATELLITE_DIR = BASE_DIR / "data" / "satellite" / "india_cloud"
 
 MODEL = os.environ.get("OLLAMA_MODEL", "llama3.2:3b")
 
@@ -59,14 +60,42 @@ GET_RAINFALL_TOOL = {
     },
 }
 
+GET_SATELLITE_TOOL = {
+    "type": "function",
+    "function": {
+        "name": "get_satellite_image",
+        "description": (
+            "Look up the NASA GIBS true-colour satellite image of India for a specific day. "
+            "Only available for days that have already been downloaded, roughly "
+            "2019-01-01 through 2025-12-31."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "date": {
+                    "type": "string",
+                    "description": "Date in YYYY-MM-DD format.",
+                },
+            },
+            "required": ["date"],
+        },
+    },
+}
+
 
 def _system_prompt():
     return f"""You are a rainfall assistant for India. Today's date is {date.today().isoformat()}.
 
 You answer questions about how much it rained on a given day or over a date range, in a given
-state, union territory, or city. You have one tool, get_rainfall, backed by the IMD RF25 gridded
-daily rainfall dataset (0.25 degree resolution), covering 2018-01-01 through 2025-12-31 only.
-Always call the tool to get real numbers — never guess a rainfall figure yourself.
+state, union territory, or city, and you can also pull up the satellite image of India for a
+given day. You have two tools:
+
+- get_rainfall, backed by the IMD RF25 gridded daily rainfall dataset (0.25 degree resolution),
+  covering 2018-01-01 through 2025-12-31 only.
+- get_satellite_image, which looks up the satellite image already downloaded for a given day
+  (roughly 2019-01-01 through 2025-12-31).
+Always call the relevant tool to get real data — never guess a rainfall figure yourself, and
+never claim you can't show an image without calling get_satellite_image first.
 
 Always pass both start_date and end_date in YYYY-MM-DD format. For a single day, set them equal.
 If a question implies a range ("in July 2023", "monsoon season 2022"), compute concrete
@@ -74,10 +103,13 @@ start_date/end_date values yourself. If the user asks about multiple places or p
 tool once per place/period.
 
 If a date falls outside 2018-2025, tell the user the data doesn't cover it rather than guessing.
-If the tool returns an error, report it plainly to the user instead of making up a number.
+If a tool returns an error, report it plainly to the user instead of making up a number or image.
 
-Keep answers short: for a single day, state the mm figure plainly; for a range, give the total
-and average. Numbers only need one or two decimal places. Do not mention the tool by name or
+When get_satellite_image succeeds, the image itself is shown to the user separately — just
+briefly confirm the date it's for, do not describe or repeat the image URL.
+
+Keep answers short: for a single day's rainfall, state the mm figure plainly; for a range, give
+the total and average. Numbers only need one or two decimal places. Do not mention tool names or
 describe your process — just answer."""
 
 
@@ -268,6 +300,54 @@ def get_rainfall(place, start_date, end_date=None):
     return result
 
 
+def get_satellite_image(date_str):
+    try:
+        d = pd.to_datetime(date_str)
+    except (ValueError, TypeError):
+        return {"error": f"Couldn't parse the date '{date_str}'."}
+
+    date_key = str(d.date())
+    path = SATELLITE_DIR / date_key[:4] / f"{date_key}.png"
+    if not path.exists():
+        return {"error": f"No satellite image available for {date_key}."}
+
+    return {"date": date_key, "image_url": f"/api/satellite/{date_key}"}
+
+
+def _supports_tools(name):
+    """True/False if we can tell whether `name` supports tool calling, None if unknown
+    (e.g. the model was removed between `ollama list` and this check)."""
+    try:
+        info = ollama.show(name)
+    except Exception:
+        return None
+    return "tools" in (info.capabilities or [])
+
+
+def list_models():
+    """Models already pulled in the local Ollama install, for a model picker. This
+    chatbot only works with tool-calling models (it looks up rainfall/satellite data
+    via tools rather than letting the model guess), so each entry says whether it
+    qualifies."""
+    try:
+        resp = ollama.list()
+    except Exception as e:
+        raise RuntimeError(
+            f"Can't reach Ollama at {os.environ.get('OLLAMA_HOST', 'http://localhost:11434')} "
+            f"— is `ollama serve` running? ({e})"
+        )
+
+    models = []
+    for m in resp.models:
+        models.append({
+            "name": m.model,
+            "size_bytes": m.size,
+            "parameter_size": m.details.parameter_size if m.details else None,
+            "supports_tools": _supports_tools(m.model),
+        })
+    return sorted(models, key=lambda m: m["name"])
+
+
 def _execute_tool_call(name, tool_input):
     if name == "get_rainfall":
         return get_rainfall(
@@ -275,6 +355,8 @@ def _execute_tool_call(name, tool_input):
             tool_input.get("start_date", ""),
             tool_input.get("end_date"),
         )
+    if name == "get_satellite_image":
+        return get_satellite_image(tool_input.get("date", ""))
     return {"error": f"Unknown tool '{name}'."}
 
 
@@ -288,13 +370,21 @@ def serialize_messages(messages):
     return out
 
 
-def chat(messages):
+def chat(messages, model=None, compute=None):
     """Run one assistant turn given the full conversation so far.
 
-    `messages` is a list of {"role": ..., "content": ...} dicts. Returns the
-    updated messages list (with the assistant's turn, including any tool
-    round-trips, appended) plus the final assistant text reply.
+    `messages` is a list of {"role": ..., "content": ...} dicts. `model` optionally
+    overrides the default Ollama model (OLLAMA_MODEL env var) for this turn, letting
+    the caller pick any model already pulled locally. `compute` optionally forces
+    CPU-only execution ("cpu") instead of Ollama's default of using a GPU when one's
+    available ("auto", or omitted). Returns the updated messages list (with the
+    assistant's turn, including any tool round-trips, appended), the final assistant
+    text reply, and a list of any satellite images fetched along the way (each
+    {"date": ..., "image_url": ...}).
     """
+    chat_model = model or MODEL
+    options = {"num_gpu": 0} if compute == "cpu" else None
+
     try:
         ollama.list()
     except Exception as e:
@@ -303,14 +393,22 @@ def chat(messages):
             f"— is `ollama serve` running? ({e})"
         )
 
+    if _supports_tools(chat_model) is False:
+        raise RuntimeError(
+            f"'{chat_model}' doesn't support tool calling, which this chatbot needs to look up "
+            f"real rainfall and satellite data — pick a different model (e.g. llama3.2:3b)."
+        )
+
     working = [{"role": "system", "content": _system_prompt()}] + list(messages)
+    images = []
+    tools = [GET_RAINFALL_TOOL, GET_SATELLITE_TOOL]
 
     for _ in range(5):  # cap tool round-trips
         try:
-            response = ollama.chat(model=MODEL, messages=working, tools=[GET_RAINFALL_TOOL])
+            response = ollama.chat(model=chat_model, messages=working, tools=tools, options=options)
         except Exception as e:
             raise RuntimeError(
-                f"Ollama model '{MODEL}' isn't available — run `ollama pull {MODEL}`. ({e})"
+                f"Ollama model '{chat_model}' isn't available — run `ollama pull {chat_model}`. ({e})"
             )
 
         assistant_msg = response.message
@@ -319,10 +417,12 @@ def chat(messages):
         if not assistant_msg.tool_calls:
             reply_text = assistant_msg.content or ""
             # Drop the system prompt we prepended before returning to the caller.
-            return working[1:], reply_text
+            return working[1:], reply_text, images
 
         for call in assistant_msg.tool_calls:
             result = _execute_tool_call(call.function.name, call.function.arguments)
+            if call.function.name == "get_satellite_image" and "image_url" in result:
+                images.append({"date": result["date"], "image_url": result["image_url"]})
             working.append({"role": "tool", "content": json.dumps(result)})
 
-    return working[1:], "Sorry, I got stuck looking that up — could you rephrase your question?"
+    return working[1:], "Sorry, I got stuck looking that up — could you rephrase your question?", images
