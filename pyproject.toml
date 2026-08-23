@@ -1,7 +1,7 @@
 [project]
-name = "ai-weather-analysis"
+name = "nimbus"
 version = "0.1.0"
-description = "AI predictive weather analysis for India: rainfall map, chatbot, and forecasting"
+description = "Nimbus -- AI predictive weather analysis for India: rainfall map, chatbot, and forecasting"
 requires-python = ">=3.12"
 dependencies = [
     "flask==3.1.3",
@@ -17,6 +17,7 @@ dependencies = [
     "scikit-learn==1.9.0",
     "pillow==12.3.0",
     "click==8.4.2",
+    "anthropic==1.0.0",
 ]
 
 [project.optional-dependencies]
@@ -29,7 +30,7 @@ dependencies = [
 torch = ["torch==2.13.0+cpu"]
 
 [project.scripts]
-weatherai = "cli:main"
+nimbus = "cli:main"
 
 [build-system]
 requires = ["hatchling"]
@@ -37,7 +38,7 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 # Single-file modules at the repo root (app.py, cli.py) plus the weather package --
-# this project is run in place (uv run weatherai ...), not installed elsewhere, but
+# this project is run in place (uv run nimbus ...), not installed elsewhere, but
 # hatchling still needs to know what a wheel build would contain.
 packages = ["weather"]
 

@@ -1926,7 +1926,7 @@
       })
       .catch(function(err){
         var msg = (window.location.protocol === 'file:')
-          ? 'This needs the local server running — start it with "python app.py" (or "uv run weatherai serve") and try again.'
+          ? 'This needs the local server running — start it with "python app.py" (or "uv run nimbus serve") and try again.'
           : ((err && err.message) ? err.message : String(err));
         setResult(msg, 'error');
       })

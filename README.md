@@ -1,6 +1,6 @@
-# AI Predictive Weather Analysis
+# Nimbus
 
-Tools for exploring and *predicting* India's daily rainfall: a Flask app that
+AI predictive weather analysis for India. Tools for exploring and *predicting* India's daily rainfall: a Flask app that
 renders historical rainfall (IMD RF25 gridded data, 2018–2025) on an
 interactive map, a chatbot answering plain-English rainfall questions, and
 two predictive models — a short-range rainfall forecaster and a satellite-
@@ -91,9 +91,21 @@ did it rain in Kerala in August 2022?" — it resolves the place against an
 offline gazetteer (`data/places/india_places.json`), finds the nearest IMD
 RF25 grid cell, and reads the rainfall figures out of `data/rainfall/`.
 
-Question parsing and answer phrasing run on a **local** model via
-[Ollama](https://ollama.com) — no API key, nothing leaves the machine.
-One-time setup:
+Each question is answered by the fastest tier that can handle it:
+
+1. **A deterministic local parser** (`weather/fast_intent.py`) — no LLM at all.
+   Handles the common case (a single place + a single date, observed or
+   forecast) in milliseconds. Nothing leaves the machine, no setup needed.
+2. **The Claude API** (`claude-haiku-4-5` by default), if `ANTHROPIC_API_KEY`
+   is set — for anything the fast path can't confidently parse (comparisons,
+   date ranges, open-ended "analyse this" questions). Answers in a few
+   seconds, but the question text is sent to Anthropic's API. Fully optional —
+   set the env var to enable it; override the model with `ANTHROPIC_MODEL`.
+3. **A local model via [Ollama](https://ollama.com)** — the original,
+   fully-offline path, used automatically if step 2 isn't configured or its
+   call fails for any reason. No API key, nothing leaves the machine, but
+   tens of seconds to a few minutes on CPU-only hardware, since it's a real
+   LLM doing real tool-calling inference. One-time setup:
 
 ```bash
 # install Ollama (see ollama.com), then:
@@ -101,12 +113,16 @@ ollama pull llama3.2:3b
 ollama serve   # if it isn't already running as a service
 ```
 
-The model is configurable via `OLLAMA_MODEL` (default `llama3.2:3b`) and the
-server via `OLLAMA_HOST` (default `http://localhost:11434`). Pick a model
-that supports tool calling — `llama3.2`, `qwen2.5`, and `mistral-nemo` all
-do; `tinyllama` does not. If Ollama isn't running or the model hasn't been
-pulled, `/chat` still loads but `/api/chat` returns a 503 explaining what to
-fix.
+The Ollama model is configurable via `OLLAMA_MODEL` (default `llama3.2:3b`)
+and the server via `OLLAMA_HOST` (default `http://localhost:11434`, can point
+at another machine on the network if this one is slow). Pick a model that
+supports tool calling — `llama3.2`, `qwen2.5`, and `mistral-nemo` all do;
+`tinyllama` does not. Smaller tool-calling models (`llama3.2:1b`,
+`qwen2.5:1.5b`) are noticeably faster but were tested and found unreliable
+for this chatbot — they fabricated place names and skipped required
+forecast-vs-observed disclosures, so neither is used here despite the speed.
+If neither Claude nor Ollama is reachable, `/chat` still loads but
+`/api/chat` returns a 503 explaining what to fix.
 
 ## Forecasting
 

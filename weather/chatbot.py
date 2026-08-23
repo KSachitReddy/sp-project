@@ -6,10 +6,13 @@ Rainfall chatbot: lets a user ask things like "how much did it rain in Pune on
   resolve a place name to a lat/lon, without any external geocoding service.
 - get_rainfall() finds the nearest IMD RF25 grid cell (0.25 degree resolution)
   to that lat/lon and reads the matching rows out of data/rainfall/rainfall_<year>.csv.
-- chat() drives a tool-use turn against a local Ollama model: the model parses
-  the free-text question (place, date/date range) via the get_rainfall tool,
-  we execute it against the local data, and the model phrases the final answer.
-  Nothing leaves the machine — no API key needed.
+- chat() answers in three tiers, fastest first: a deterministic local parser
+  (weather.fast_intent) for common single place/date questions -- no LLM at
+  all; the Claude API (Haiku, if ANTHROPIC_API_KEY is set) for anything that
+  needs real language understanding; and a local Ollama model as a last-resort
+  fallback if the cloud call fails or no API key is configured, so the
+  chatbot still works fully offline, just slower. Only the middle tier sends
+  anything off the machine, and only when it's configured to.
 """
 import difflib
 import json
@@ -22,6 +25,8 @@ from pathlib import Path
 import httpx
 import ollama
 import pandas as pd
+
+CLOUD_MODEL = os.environ.get("ANTHROPIC_MODEL", "claude-haiku-4-5")
 
 BASE_DIR = Path(__file__).parent.parent
 PLACES_PATH = BASE_DIR / "data" / "places" / "india_places.json"
@@ -136,6 +141,34 @@ GET_SATELLITE_TOOL = {
     },
 }
 
+GET_RAINFALL_ANALYSIS_TOOL = {
+    "type": "function",
+    "function": {
+        "name": "get_rainfall_analysis",
+        "description": (
+            "Real computed rainfall trend/anomaly statistics for a place -- actual arithmetic "
+            "over the historical record (2018-2025), not a guess. Use for 'analyse'/'trend'/"
+            "'pattern'/'compare over the years' style questions. Two modes: pass 'year' for a "
+            "single year's month-by-month totals and anomaly vs. that place's own long-term "
+            "average; pass 'start_year' and 'end_year' for a year-over-year trend across a range. "
+            "Provide exactly one of these modes, not both."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "place": {
+                    "type": "string",
+                    "description": "Name of an Indian state, union territory, or city, e.g. 'Kerala'.",
+                },
+                "year": {"type": "integer", "description": "For a single-year summary."},
+                "start_year": {"type": "integer", "description": "For a trend: first year of the range."},
+                "end_year": {"type": "integer", "description": "For a trend: last year of the range."},
+            },
+            "required": ["place"],
+        },
+    },
+}
+
 
 def _system_prompt():
     today = date.today()
@@ -145,8 +178,8 @@ def _system_prompt():
 
 You answer questions about how much it rained on a given day or over a date range, in a given
 state, union territory, or city; you can predict rainfall for future dates, both a place-specific
-forecast and a same-day nationwide nowcast; and you can also pull up the satellite image of India
-for a given day. You have four tools:
+forecast and a same-day nationwide nowcast; you can pull up the satellite image of India for a
+given day; and you can report real computed trend/anomaly statistics for a place. You have five tools:
 
 - get_rainfall, backed by the IMD RF25 gridded daily rainfall dataset (0.25 degree resolution),
   covering 2018-01-01 through 2025-12-31 only. Use this for any date in that range.
@@ -161,6 +194,11 @@ for a given day. You have four tools:
   image, not from the rainfall dataset.
 - get_satellite_image, which looks up the satellite image already downloaded for a given day
   (roughly 2019-01-01 through 2025-12-31).
+- get_rainfall_analysis, for "analyse"/"trend"/"pattern"/"how has X changed" style questions about
+  a place. Pass 'year' for one year's month-by-month totals and anomaly vs. that place's own
+  long-term average; pass 'start_year' and 'end_year' for a year-over-year trend. This returns
+  real computed numbers — always use it for these questions instead of estimating a trend
+  yourself from memory or from a get_rainfall lookup's raw daily figures.
 Always call the relevant tool to get real data — never guess a rainfall figure yourself, and
 never claim you can't show an image without calling get_satellite_image first.
 
@@ -178,8 +216,11 @@ days") to an actual date yourself before calling get_rainfall_forecast — never
 
 For get_rainfall, always pass both start_date and end_date in YYYY-MM-DD format. For a single day,
 set them equal. If a question implies a range ("in July 2023", "monsoon season 2022"), compute
-concrete start_date/end_date values yourself. If the user asks about multiple places or periods,
-call the tool once per place/period.
+concrete start_date/end_date values yourself. If the user asks about multiple places or periods
+(e.g. "compare Kerala and Tamil Nadu" or "rainfall each year from 2020 to 2023"), issue ALL of
+those tool calls together in a single turn rather than one at a time across several turns —
+each turn is expensive to run locally, so batching every call you already know you need saves
+real time without changing the answer.
 
 If a date falls before 2018 or is more than a year or so past today, tell the user the data
 doesn't cover it rather than guessing. If a tool returns an error, report it plainly to the user
@@ -496,7 +537,35 @@ def _execute_tool_call(name, tool_input):
         return get_satellite_nowcast()
     if name == "get_satellite_image":
         return get_satellite_image(tool_input.get("date", ""))
+    if name == "get_rainfall_analysis":
+        return get_rainfall_analysis(
+            tool_input.get("place", ""),
+            tool_input.get("year"),
+            tool_input.get("start_year"),
+            tool_input.get("end_year"),
+        )
     return {"error": f"Unknown tool '{name}'."}
+
+
+def get_rainfall_analysis(place, year=None, start_year=None, end_year=None):
+    from weather import analysis  # lazy: sqlite3 + the analysis db are only needed here
+
+    resolved = resolve_place(place)
+    if resolved is None:
+        return {"error": f"Couldn't find an Indian state, union territory, or city matching '{place}'."}
+    if not analysis.available():
+        return {"error": "Analysis database not built yet -- run `uv run nimbus analyse --build` first."}
+
+    if start_year and end_year:
+        result = analysis.trend(resolved["name"], start_year, end_year)
+    elif year:
+        result = analysis.yearly_summary(resolved["name"], year)
+    else:
+        return {"error": "Specify either 'year', or both 'start_year' and 'end_year'."}
+
+    if "error" not in result:
+        result["matched_place"] = resolved["name"]
+    return result
 
 
 def serialize_messages(messages):
@@ -510,19 +579,108 @@ def serialize_messages(messages):
 
 
 def chat(messages, model=None, compute=None):
-    """Run one assistant turn given the full conversation so far.
+    """Run one assistant turn given the full conversation so far, fastest tier first:
+
+    1. weather.fast_intent -- deterministic, no LLM at all. Only attempted on a
+       single first-turn question (a follow-up needs conversation context this
+       parser doesn't track), and only used if it confidently recognizes the
+       question; otherwise falls through.
+    2. The Claude API (CLOUD_MODEL / ANTHROPIC_API_KEY), if a key is configured --
+       real language understanding, answers in a few seconds.
+    3. Local Ollama (this function's original implementation) -- always works
+       fully offline, but tens of seconds on CPU-only hardware. Used if step 2
+       isn't configured or its call fails for any reason (network, auth, etc.),
+       so the chatbot never stops working outright.
 
     `messages` is a list of {"role": ..., "content": ...} dicts. `model` optionally
-    overrides the default Ollama model (OLLAMA_MODEL env var) for this turn, letting
-    the caller pick any model already pulled locally. `compute` optionally forces
-    CPU-only execution ("cpu") instead of Ollama's default of using a GPU when one's
-    available ("auto", or omitted). Returns the updated messages list (with the
-    assistant's turn, including any tool round-trips, appended), the final assistant
-    text reply, and a list of any satellite images fetched along the way (each
-    {"date": ..., "image_url": ...}).
+    overrides the default Ollama model (OLLAMA_MODEL env var) for step 3. `compute`
+    optionally forces CPU-only execution ("cpu") for step 3 instead of Ollama's
+    default of using a GPU when one's available ("auto", or omitted). Returns the
+    updated messages list (with the assistant's turn, including any tool
+    round-trips, appended), the final assistant text reply, and a list of any
+    satellite images fetched along the way (each {"date": ..., "image_url": ...}).
     """
+    if len(messages) == 1 and messages[0].get("role") == "user":
+        from weather import fast_intent  # lazy: fast_intent imports this module, avoiding a circular import at load time
+
+        fast = fast_intent.try_fast_reply(messages[0]["content"])
+        if fast is not None:
+            reply_text, images = fast
+            return list(messages) + [{"role": "assistant", "content": reply_text}], reply_text, images
+
+    if os.environ.get("ANTHROPIC_API_KEY"):
+        try:
+            return _cloud_chat(messages)
+        except Exception:
+            pass  # fall through to local Ollama below
+
+    return _ollama_chat(messages, model=model, compute=compute)
+
+
+def _cloud_chat(messages):
+    """Tool-calling turn against the Claude API. Raises on any failure (missing
+    package, bad/missing key, network error, API error) -- chat() catches that
+    and falls back to local Ollama, so this never needs to be failure-proof itself."""
+    import anthropic
+
+    client = anthropic.Anthropic()  # resolves ANTHROPIC_API_KEY from the environment
+    tools = [GET_RAINFALL_TOOL, GET_RAINFALL_FORECAST_TOOL, GET_SATELLITE_NOWCAST_TOOL, GET_SATELLITE_TOOL, GET_RAINFALL_ANALYSIS_TOOL]
+    claude_tools = [
+        {"name": t["function"]["name"], "description": t["function"]["description"],
+         "input_schema": t["function"]["parameters"]}
+        for t in tools
+    ]
+
+    working = list(messages)
+    claude_messages = [{"role": m["role"], "content": m["content"]} for m in messages]
+    images = []
+
+    for _ in range(5):  # cap tool round-trips
+        response = client.messages.create(
+            model=CLOUD_MODEL,
+            max_tokens=512,  # short factual answers only -- see _system_prompt()
+            system=_system_prompt(),
+            tools=claude_tools,
+            messages=claude_messages,
+        )
+
+        tool_use_blocks = [b for b in response.content if b.type == "tool_use"]
+        reply_text = "".join(b.text for b in response.content if b.type == "text")
+
+        if not tool_use_blocks:
+            working.append({"role": "assistant", "content": reply_text})
+            return working, reply_text, images
+
+        working.append({
+            "role": "assistant",
+            "content": reply_text,
+            "tool_calls": [{"function": {"name": b.name, "arguments": b.input}} for b in tool_use_blocks],
+        })
+        claude_messages.append({"role": "assistant", "content": response.content})
+
+        tool_results = []
+        for b in tool_use_blocks:
+            result = _execute_tool_call(b.name, b.input)
+            if b.name == "get_satellite_image" and "image_url" in result:
+                images.append({"date": result["date"], "image_url": result["image_url"]})
+            working.append({"role": "tool", "content": json.dumps(result)})
+            tool_results.append({"type": "tool_result", "tool_use_id": b.id, "content": json.dumps(result)})
+        claude_messages.append({"role": "user", "content": tool_results})
+
+    reply_text = "Sorry, I got stuck looking that up — could you rephrase your question?"
+    working.append({"role": "assistant", "content": reply_text})
+    return working, reply_text, images
+
+
+def _ollama_chat(messages, model=None, compute=None):
+    """Local Ollama tool-calling loop -- see chat()'s docstring for where this
+    fits (last-resort fallback: fully offline, but slow on CPU-only hardware)."""
     chat_model = model or MODEL
-    options = {"num_gpu": 0} if compute == "cpu" else None
+    # num_predict caps generation length: on CPU-only inference, an open-ended "analyse
+    # this" question can otherwise make the model ramble for a very long response, and
+    # decode time (unlike prefill) scales directly with output length -- this bounds the
+    # worst case without affecting the short, factual answers this chatbot is meant to give.
+    options = {"num_gpu": 0, "num_predict": 300} if compute == "cpu" else {"num_predict": 300}
 
     try:
         _client.list()
@@ -540,7 +698,7 @@ def chat(messages, model=None, compute=None):
 
     working = [{"role": "system", "content": _system_prompt()}] + list(messages)
     images = []
-    tools = [GET_RAINFALL_TOOL, GET_RAINFALL_FORECAST_TOOL, GET_SATELLITE_NOWCAST_TOOL, GET_SATELLITE_TOOL]
+    tools = [GET_RAINFALL_TOOL, GET_RAINFALL_FORECAST_TOOL, GET_SATELLITE_NOWCAST_TOOL, GET_SATELLITE_TOOL, GET_RAINFALL_ANALYSIS_TOOL]
 
     for _ in range(5):  # cap tool round-trips
         try:

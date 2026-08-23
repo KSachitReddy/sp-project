@@ -11,6 +11,7 @@ lightgbm==4.7.0
 scikit-learn==1.9.0
 pillow==12.3.0
 click==8.4.2
+anthropic==1.0.0
 
 # Satellite nowcaster only -- optional, not required for the map, chatbot, or
 # rainfall forecaster. Skip this on CPUs older than Intel Haswell (4th-gen Core)

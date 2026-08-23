@@ -1,5 +1,5 @@
 """
-Local server for the AI Predictive Weather Analysis project.
+Local server for Nimbus -- AI Predictive Weather Analysis.
 
 - Serves the interactive map page.
 - GET  /api/years              lists the years available in "data/nc/" for the drawer.
@@ -19,6 +19,10 @@ Local server for the AI Predictive Weather Analysis project.
 - GET  /api/nowcast              predicts tomorrow's mean rainfall (mm) per macro-region
                                 of India from the most recent downloaded satellite image,
                                 via weather.nowcast_model's CNN.
+- GET  /api/analysis            real computed trend/anomaly statistics for a place, via
+                                weather.analysis (SQLite, precomputed by
+                                `nimbus analyse --build`) -- 'year' for a single-year
+                                summary, or 'start_year'+'end_year' for a trend.
 - GET  /chat                   serves the rainfall chatbot page.
 - GET  /api/models             lists Ollama models already pulled locally, for the
                                 chat model picker.
@@ -108,6 +112,21 @@ def api_forecast():
         return jsonify({"error": "Expected 'place' and 'date' query params."}), 400
 
     result = chatbot.get_weather(place, date_str)
+    if "error" in result:
+        return jsonify(result), 400
+    return jsonify(result)
+
+
+@app.route("/api/analysis")
+def api_analysis():
+    place = request.args.get("place", "")
+    year = request.args.get("year", type=int)
+    start_year = request.args.get("start_year", type=int)
+    end_year = request.args.get("end_year", type=int)
+    if not place or (not year and not (start_year and end_year)):
+        return jsonify({"error": "Expected 'place' with either 'year', or both 'start_year' and 'end_year'."}), 400
+
+    result = chatbot.get_rainfall_analysis(place, year, start_year, end_year)
     if "error" in result:
         return jsonify(result), 400
     return jsonify(result)
