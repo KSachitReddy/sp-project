@@ -1,0 +1,68 @@
+{
+  "n_train": 3951200,
+  "n_val": 802952,
+  "n_test": 1594450,
+  "best_iteration": 28,
+  "by_split": {
+    "val_2023": {
+      "1": {
+        "n": 200738,
+        "mae": 4.163,
+        "rmse": 9.943,
+        "climatology_rmse": 10.215,
+        "skill_vs_climatology": 0.0524
+      },
+      "3": {
+        "n": 200738,
+        "mae": 4.195,
+        "rmse": 10.015,
+        "climatology_rmse": 10.215,
+        "skill_vs_climatology": 0.0387
+      },
+      "7": {
+        "n": 200738,
+        "mae": 4.214,
+        "rmse": 10.063,
+        "climatology_rmse": 10.219,
+        "skill_vs_climatology": 0.0301
+      },
+      "14": {
+        "n": 200738,
+        "mae": 4.221,
+        "rmse": 10.075,
+        "climatology_rmse": 10.226,
+        "skill_vs_climatology": 0.0293
+      }
+    },
+    "test_2024_2025": {
+      "1": {
+        "n": 401500,
+        "mae": 4.351,
+        "rmse": 10.555,
+        "climatology_rmse": 10.74,
+        "skill_vs_climatology": 0.0341
+      },
+      "3": {
+        "n": 400400,
+        "mae": 4.387,
+        "rmse": 10.64,
+        "climatology_rmse": 10.755,
+        "skill_vs_climatology": 0.0211
+      },
+      "7": {
+        "n": 398200,
+        "mae": 4.416,
+        "rmse": 10.702,
+        "climatology_rmse": 10.782,
+        "skill_vs_climatology": 0.0146
+      },
+      "14": {
+        "n": 394350,
+        "mae": 4.451,
+        "rmse": 10.773,
+        "climatology_rmse": 10.829,
+        "skill_vs_climatology": 0.0103
+      }
+    }
+  }
+}

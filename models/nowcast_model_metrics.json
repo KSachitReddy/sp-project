@@ -1,0 +1,119 @@
+{
+  "n_train": 1826,
+  "n_val": 366,
+  "n_test": 364,
+  "by_split": {
+    "val_2024": {
+      "north": {
+        "n": 366,
+        "mae": 0.921,
+        "rmse": 1.923,
+        "persistence_rmse": 2.308,
+        "skill_vs_persistence": 0.3061,
+        "climatology_rmse": 2.836,
+        "skill_vs_climatology": 0.5402
+      },
+      "south": {
+        "n": 366,
+        "mae": 2.293,
+        "rmse": 4.013,
+        "persistence_rmse": 4.494,
+        "skill_vs_persistence": 0.2028,
+        "climatology_rmse": 4.893,
+        "skill_vs_climatology": 0.3274
+      },
+      "east": {
+        "n": 366,
+        "mae": 2.144,
+        "rmse": 4.686,
+        "persistence_rmse": 5.332,
+        "skill_vs_persistence": 0.2277,
+        "climatology_rmse": 5.959,
+        "skill_vs_climatology": 0.3817
+      },
+      "west": {
+        "n": 366,
+        "mae": 1.295,
+        "rmse": 2.849,
+        "persistence_rmse": 2.603,
+        "skill_vs_persistence": -0.1973,
+        "climatology_rmse": 4.567,
+        "skill_vs_climatology": 0.6109
+      },
+      "central": {
+        "n": 366,
+        "mae": 1.397,
+        "rmse": 2.789,
+        "persistence_rmse": 2.877,
+        "skill_vs_persistence": 0.0603,
+        "climatology_rmse": 3.484,
+        "skill_vs_climatology": 0.3589
+      },
+      "northeast": {
+        "n": 366,
+        "mae": 2.9,
+        "rmse": 5.043,
+        "persistence_rmse": 4.86,
+        "skill_vs_persistence": -0.0765,
+        "climatology_rmse": 6.359,
+        "skill_vs_climatology": 0.3712
+      }
+    },
+    "test_2025": {
+      "north": {
+        "n": 364,
+        "mae": 1.094,
+        "rmse": 2.053,
+        "persistence_rmse": 2.14,
+        "skill_vs_persistence": 0.0791,
+        "climatology_rmse": 2.703,
+        "skill_vs_climatology": 0.4228
+      },
+      "south": {
+        "n": 364,
+        "mae": 2.124,
+        "rmse": 3.346,
+        "persistence_rmse": 3.721,
+        "skill_vs_persistence": 0.1914,
+        "climatology_rmse": 4.786,
+        "skill_vs_climatology": 0.5113
+      },
+      "east": {
+        "n": 364,
+        "mae": 2.282,
+        "rmse": 4.715,
+        "persistence_rmse": 4.908,
+        "skill_vs_persistence": 0.077,
+        "climatology_rmse": 5.525,
+        "skill_vs_climatology": 0.2718
+      },
+      "west": {
+        "n": 364,
+        "mae": 1.643,
+        "rmse": 3.217,
+        "persistence_rmse": 2.733,
+        "skill_vs_persistence": -0.3853,
+        "climatology_rmse": 4.069,
+        "skill_vs_climatology": 0.3749
+      },
+      "central": {
+        "n": 364,
+        "mae": 1.578,
+        "rmse": 2.819,
+        "persistence_rmse": 2.853,
+        "skill_vs_persistence": 0.0241,
+        "climatology_rmse": 3.278,
+        "skill_vs_climatology": 0.2605
+      },
+      "northeast": {
+        "n": 364,
+        "mae": 2.482,
+        "rmse": 4.768,
+        "persistence_rmse": 5.14,
+        "skill_vs_persistence": 0.1397,
+        "climatology_rmse": 6.932,
+        "skill_vs_climatology": 0.5269
+      }
+    }
+  }
+}
