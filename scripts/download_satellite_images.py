@@ -1,5 +1,9 @@
 """
-Download daily NASA GIBS satellite imagery (cloud cover) over India, 2019-2025.
+Download daily NASA GIBS satellite imagery (cloud cover) over India, from
+2019-01-01 through yesterday (GIBS is near-real-time, unlike the IMD rainfall
+data elsewhere in this repo, which lags by roughly a year -- re-running this
+script periodically keeps the imagery current, which the satellite nowcasting
+model in weather/nowcast_model.py needs for a live prediction).
 
 Uses the public GIBS WMS GetMap endpoint (no API key/login needed) to fetch one
 PNG per day into data/satellite/india_cloud/<year>/YYYY-MM-DD.png, alongside
@@ -40,7 +44,7 @@ LAYERS = [
 ]
 
 START_DATE = date(2019, 1, 1)
-END_DATE = date(2025, 12, 31)
+END_DATE = date.today() - timedelta(days=1)  # GIBS has ~1-day publish latency
 
 REQUEST_DELAY_SEC = 0.7
 REQUEST_TIMEOUT_SEC = 30

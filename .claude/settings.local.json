@@ -32,7 +32,22 @@
       "Bash(mkdir -p \"/home/kommera/SP Project/data/places\")",
       "Bash(cd \"/home/kommera/SP Project\" && cat /tmp/flask.log)",
       "Read(//tmp/**)",
-      "Bash(ollama pull *)"
+      "Bash(ollama pull *)",
+      "Bash(time .venv/bin/python scripts/train_rainfall_forecast.py)",
+      "Bash(time .venv/bin/python scripts/forecast_2026.py)",
+      "Bash(time .venv/bin/python scripts/train_satellite_nowcast.py)",
+      "Bash(.venv/bin/python scripts/download_satellite_images.py)",
+      "Bash(.venv/bin/python -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(json.dumps\\(d['by_split']['test_2024_2025'], indent=2\\)\\)\")",
+      "Bash(.venv/bin/python scripts/verify_satellite_images.py)",
+      "Bash(curl -s http://localhost:11434/api/tags)",
+      "Bash(pkill -f \"python app.py\")",
+      "Bash(nohup .venv/bin/python app.py)",
+      "Bash(curl -s http://localhost:5050/ -o /dev/null -w \"map page: %{http_code}\\\\n\")",
+      "Bash(curl -s http://localhost:5050/chat -o /dev/null -w \"chat page: %{http_code}\\\\n\")",
+      "Bash(curl -s http://localhost:5050/api/models)",
+      "Bash(curl -s -X POST http://localhost:5050/api/chat -H 'Content-Type: application/json' -d '{\"messages\": [{\"role\": \"user\", \"content\": \"Will it rain in Kerala next week?\"}]}')",
+      "Bash(python3 -m json.tool)",
+      "Bash(curl -s -X POST http://localhost:5050/api/chat -H 'Content-Type: application/json' -d '{\"messages\": [{\"role\": \"user\", \"content\": \"Will it rain tomorrow in India?\"}]}')"
     ],
     "additionalDirectories": [
       "/home/kommera/SP Project/data"

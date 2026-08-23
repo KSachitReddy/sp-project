@@ -1,7 +1,7 @@
 """
 Verify the data/satellite/india_cloud dataset downloaded by
-download_satellite_images.py: every date from 2019-01-01 to 2025-12-31 should
-have a valid PNG on disk.
+download_satellite_images.py: every date from 2019-01-01 through yesterday
+should have a valid PNG on disk (matches that script's rolling END_DATE).
 
 Checks, per date:
   - file present
@@ -29,7 +29,7 @@ REPORT_PATH = LOG_DIR / "verification_report.txt"
 RETRY_PATH = LOG_DIR / "retry_dates.txt"
 
 START_DATE = date(2019, 1, 1)
-END_DATE = date(2025, 12, 31)
+END_DATE = date.today() - timedelta(days=1)
 
 PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
 PNG_IEND_TRAILER = b"IEND\xaeB`\x82"
@@ -111,7 +111,7 @@ def main():
     lines.append("Satellite Imagery Verification Report")
     lines.append(f"Generated: {datetime.now().isoformat(timespec='seconds')}")
     lines.append("")
-    lines.append(f"Expected days (2019-01-01 to 2025-12-31): {total}")
+    lines.append(f"Expected days ({START_DATE.isoformat()} to {END_DATE.isoformat()}): {total}")
     lines.append(f"Valid images present:                     {len(ok_dates)} ({len(ok_dates) / total * 100:.2f}%)")
     lines.append(f"Missing/corrupt:                           {len(bad_dates)}")
     lines.append("")

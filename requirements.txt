@@ -5,4 +5,16 @@ pandas==3.0.5
 xarray==2026.7.0
 netCDF4==1.7.4
 requests==2.34.2
+httpx==0.28.1
 ollama==0.6.2
+lightgbm==4.7.0
+scikit-learn==1.9.0
+pillow==12.3.0
+click==8.4.2
+
+# Satellite nowcaster only -- optional, not required for the map, chatbot, or
+# rainfall forecaster. Skip this on CPUs older than Intel Haswell (4th-gen Core)
+# / without AVX2 -- PyTorch's CPU wheel has a documented history of crashing
+# with "Illegal instruction" on those (e.g. Ivy Bridge/3rd-gen Core). Install
+# only if you want /api/nowcast and know your CPU supports AVX2:
+#   pip install torch==2.13.0+cpu --extra-index-url https://download.pytorch.org/whl/cpu

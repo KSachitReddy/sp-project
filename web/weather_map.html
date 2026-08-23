@@ -492,6 +492,24 @@
   .about-text + .about-text{ margin-top: 10px; }
   .about-text b{ color: var(--ink); font-weight: 600; }
 
+  /* ---------- Forecast panel ---------- */
+  .forecast-form{
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .forecast-send{ width: 100%; }
+  .forecast-result{
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--ink-muted);
+    line-height: 1.6;
+    margin: 12px 0 0;
+    white-space: pre-line;
+  }
+  .forecast-result.is-error{ color: var(--ink); font-weight: 600; }
+  .forecast-result.is-ok{ color: var(--ink-secondary); }
+
   /* ---------- Chat panel ---------- */
   .chat-card{ display: flex; flex-direction: column; }
   .chat-log{
@@ -850,6 +868,16 @@
         <h2>About this map</h2>
         <p class="about-text">Ocean and no-data cells are transparent to the map's dark ground; every visible tile is a real IMD grid point, which is why the coastline emerges naturally from the data.</p>
         <p class="about-text">Pulsing droplets mark cells over <b>20&nbsp;mm</b> for the day; they grow larger and pulse faster as rainfall intensifies.</p>
+      </div>
+
+      <div class="panel-card">
+        <h2>Predict Rainfall</h2>
+        <form class="forecast-form" id="forecastForm">
+          <input type="text" class="chat-input" id="forecastPlace" placeholder="Place (e.g. Mumbai)" autocomplete="off" />
+          <input type="date" class="chat-input" id="forecastDate" />
+          <button class="chat-send forecast-send" id="forecastSend" type="submit">Predict</button>
+        </form>
+        <p class="forecast-result" id="forecastResult">Pick a place and date — past dates (2018–2025) show what actually happened, later dates show a forecast.</p>
       </div>
 
       <div class="panel-card chat-card">
@@ -1846,6 +1874,65 @@
   input.addEventListener('input', function(){
     input.style.height = 'auto';
     input.style.height = Math.min(input.scrollHeight, 140) + 'px';
+  });
+})();
+</script>
+
+<script>
+(function(){
+  var form = document.getElementById('forecastForm');
+  var placeInput = document.getElementById('forecastPlace');
+  var dateInput = document.getElementById('forecastDate');
+  var sendBtn = document.getElementById('forecastSend');
+  var result = document.getElementById('forecastResult');
+
+  function setResult(text, kind){
+    result.textContent = text;
+    result.className = 'forecast-result' + (kind ? ' is-' + kind : '');
+  }
+
+  function render(data){
+    if ('predicted_mm' in data){
+      var method = data.method === 'ml_short_range' ? 'short-range ML forecast' : 'climatological average';
+      var text = data.matched_place + ', ' + data.target_date + ': ' + data.predicted_mm + ' mm (' + method + ')';
+      if (data.note) text += '\n' + data.note;
+      setResult(text, 'ok');
+    } else {
+      var text = data.matched_place + ', ' + data.start_date + ': ' + data.total_rainfall_mm + ' mm (observed)';
+      setResult(text, 'ok');
+    }
+  }
+
+  form.addEventListener('submit', function(e){
+    e.preventDefault();
+    var place = placeInput.value.trim();
+    var date = dateInput.value;
+    if (!place || !date){
+      setResult('Enter both a place and a date.', 'error');
+      return;
+    }
+
+    sendBtn.disabled = true;
+    setResult('Looking up ' + place + ', ' + date + '…');
+
+    fetch('/api/forecast?place=' + encodeURIComponent(place) + '&date=' + encodeURIComponent(date))
+      .then(function(res){ return res.json().then(function(data){ return { ok: res.ok, data: data }; }); })
+      .then(function(r){
+        if (!r.ok){
+          setResult(r.data.error || 'Something went wrong.', 'error');
+          return;
+        }
+        render(r.data);
+      })
+      .catch(function(err){
+        var msg = (window.location.protocol === 'file:')
+          ? 'This needs the local server running — start it with "python app.py" (or "uv run weatherai serve") and try again.'
+          : ((err && err.message) ? err.message : String(err));
+        setResult(msg, 'error');
+      })
+      .finally(function(){
+        sendBtn.disabled = false;
+      });
   });
 })();
 </script>

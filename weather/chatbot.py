@@ -15,10 +15,11 @@ import difflib
 import json
 import math
 import os
-from datetime import date
+from datetime import date, timedelta
 from functools import lru_cache
 from pathlib import Path
 
+import httpx
 import ollama
 import pandas as pd
 
@@ -28,6 +29,13 @@ RAINFALL_DIR = BASE_DIR / "data" / "rainfall"
 SATELLITE_DIR = BASE_DIR / "data" / "satellite" / "india_cloud"
 
 MODEL = os.environ.get("OLLAMA_MODEL", "llama3.2:3b")
+
+# The ollama package has no timeout by default, so if the Ollama server is
+# unreachable (not running, wrong OLLAMA_HOST) a call can hang forever --
+# and since it happens on the request thread, it freezes the whole page, not
+# just the chat. A short connect timeout fails fast with a clear error, while
+# leaving read/write untimed so a slow-but-working generation isn't cut off.
+_client = ollama.Client(timeout=httpx.Timeout(5.0, read=None, write=None, pool=5.0))
 
 GET_RAINFALL_TOOL = {
     "type": "function",
@@ -60,6 +68,52 @@ GET_RAINFALL_TOOL = {
     },
 }
 
+GET_RAINFALL_FORECAST_TOOL = {
+    "type": "function",
+    "function": {
+        "name": "get_rainfall_forecast",
+        "description": (
+            "Predict rainfall (mm) for an Indian state, union territory, or city on a "
+            "FUTURE date not covered by the historical record. Uses a real short-range "
+            "machine-learning forecast for dates within about two weeks of the last "
+            "available rainfall data; beyond that it falls back to a climatological "
+            "(historical-average-for-this-time-of-year) estimate, since no genuine "
+            "recent data exists to forecast from that far out -- the response's 'method' "
+            "field says which one was used. Do not use this for dates already covered by "
+            "get_rainfall's 2018-2025 range; use get_rainfall for those instead."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "place": {
+                    "type": "string",
+                    "description": "Name of an Indian state, union territory, or city, e.g. 'Kerala' or 'Mumbai'.",
+                },
+                "date": {
+                    "type": "string",
+                    "description": "The future date to forecast, in YYYY-MM-DD format.",
+                },
+            },
+            "required": ["place", "date"],
+        },
+    },
+}
+
+GET_SATELLITE_NOWCAST_TOOL = {
+    "type": "function",
+    "function": {
+        "name": "get_satellite_nowcast",
+        "description": (
+            "Predict tomorrow's mean rainfall (mm) for each macro-region of India "
+            "(north, south, east, west, central, northeast) from today's actual satellite "
+            "imagery, using a trained CNN -- a genuine nationwide nowcast, not a place-specific "
+            "lookup. Use for 'will it rain tomorrow' style questions. Takes no arguments; it "
+            "always predicts one day ahead of the most recent satellite image on disk."
+        ),
+        "parameters": {"type": "object", "properties": {}},
+    },
+}
+
 GET_SATELLITE_TOOL = {
     "type": "function",
     "function": {
@@ -84,26 +138,52 @@ GET_SATELLITE_TOOL = {
 
 
 def _system_prompt():
-    return f"""You are a rainfall assistant for India. Today's date is {date.today().isoformat()}.
+    today = date.today()
+    tomorrow = today + timedelta(days=1)
+    next_week = today + timedelta(days=7)
+    return f"""You are a rainfall assistant for India. Today's date is {today.isoformat()}.
 
 You answer questions about how much it rained on a given day or over a date range, in a given
-state, union territory, or city, and you can also pull up the satellite image of India for a
-given day. You have two tools:
+state, union territory, or city; you can predict rainfall for future dates, both a place-specific
+forecast and a same-day nationwide nowcast; and you can also pull up the satellite image of India
+for a given day. You have four tools:
 
 - get_rainfall, backed by the IMD RF25 gridded daily rainfall dataset (0.25 degree resolution),
-  covering 2018-01-01 through 2025-12-31 only.
+  covering 2018-01-01 through 2025-12-31 only. Use this for any date in that range.
+- get_rainfall_forecast, for a specific place and a date AFTER 2025-12-31 (i.e. not covered by
+  get_rainfall). Gives a real short-range ML forecast for roughly the first two weeks past the
+  historical record, and a climatology-based (historical-average-for-this-time-of-year) estimate
+  beyond that — its 'method' field says which. Always state plainly which kind of estimate it is:
+  a real forecast, or a seasonal/climatological average, never blur the two together.
+- get_satellite_nowcast, ONLY for a question with no named place that asks specifically about
+  tomorrow (e.g. "will it rain tomorrow?"). Takes no arguments. Predicts tomorrow's mean rainfall
+  per macro-region of India (north/south/east/west/central/northeast) from today's actual satellite
+  image, not from the rainfall dataset.
 - get_satellite_image, which looks up the satellite image already downloaded for a given day
   (roughly 2019-01-01 through 2025-12-31).
 Always call the relevant tool to get real data — never guess a rainfall figure yourself, and
 never claim you can't show an image without calling get_satellite_image first.
 
-Always pass both start_date and end_date in YYYY-MM-DD format. For a single day, set them equal.
-If a question implies a range ("in July 2023", "monsoon season 2022"), compute concrete
-start_date/end_date values yourself. If the user asks about multiple places or periods, call the
-tool once per place/period.
+Deciding between get_rainfall_forecast and get_satellite_nowcast for a future-rain question: if
+the question names ANY specific place (a state, union territory, or city), always use
+get_rainfall_forecast with that place and a concrete YYYY-MM-DD date computed from today's date
+above, even if the phrasing is "tomorrow" or "next week" — get_satellite_nowcast is ONLY for a
+question about all of India with no place named. Examples, computed from today being
+{today.isoformat()}: "will it rain in Kerala next week" -> get_rainfall_forecast(place="Kerala",
+date="{next_week.isoformat()}"). "will it rain in Mumbai tomorrow" ->
+get_rainfall_forecast(place="Mumbai", date="{tomorrow.isoformat()}"). "will it rain tomorrow" (no
+place) -> get_satellite_nowcast(). Always resolve relative phrases ("tomorrow", "next week", "in 3
+days") to an actual date yourself before calling get_rainfall_forecast — never pass the words
+"tomorrow" or "next week" as the date argument.
 
-If a date falls outside 2018-2025, tell the user the data doesn't cover it rather than guessing.
-If a tool returns an error, report it plainly to the user instead of making up a number or image.
+For get_rainfall, always pass both start_date and end_date in YYYY-MM-DD format. For a single day,
+set them equal. If a question implies a range ("in July 2023", "monsoon season 2022"), compute
+concrete start_date/end_date values yourself. If the user asks about multiple places or periods,
+call the tool once per place/period.
+
+If a date falls before 2018 or is more than a year or so past today, tell the user the data
+doesn't cover it rather than guessing. If a tool returns an error, report it plainly to the user
+instead of making up a number or image.
 
 When get_satellite_image succeeds, the image itself is shown to the user separately — just
 briefly confirm the date it's for, do not describe or repeat the image URL.
@@ -300,6 +380,61 @@ def get_rainfall(place, start_date, end_date=None):
     return result
 
 
+def get_rainfall_forecast(place, date_str):
+    """Predict rainfall for a future date, via weather.forecast_model. Reuses
+    resolve_place/nearest_cell so a place resolves to the same grid cell as
+    get_rainfall would use for the same query."""
+    from weather.forecast_model import predict_rainfall  # lazy: avoids importing lightgbm/pandas-heavy model code for callers that never forecast
+
+    resolved = resolve_place(place)
+    if resolved is None:
+        return {"error": f"Couldn't find an Indian state, union territory, or city matching '{place}'."}
+
+    try:
+        target_date = pd.to_datetime(date_str)
+    except (ValueError, TypeError):
+        return {"error": f"Couldn't parse the date '{date_str}'."}
+
+    grid_lat, grid_lon = nearest_cell(resolved["lat"], resolved["lon"])
+    result = predict_rainfall(grid_lat, grid_lon, target_date)
+    if "error" not in result:
+        result["matched_place"] = resolved["name"]
+        result["place_type"] = resolved["type"]
+    return result
+
+
+def _last_available_date():
+    """Newest date actually on disk, without loading the full 14.5M-row history --
+    reuses _load_year_df's cache, which get_rainfall already pays for."""
+    years = available_years()
+    if not years:
+        return None
+    df = _load_year_df(years[-1])
+    return None if df is None else df["date"].max()
+
+
+def get_weather(place, date_str):
+    """Single entry point for 'what's the weather in <place> on <date>': observed
+    rainfall for a date within the historical record, otherwise a forecast. Powers
+    the map page's date lookup and the CLI's `forecast` command, so both agree with
+    what the chatbot would say for the same place/date."""
+    try:
+        target_date = pd.to_datetime(date_str).normalize()
+    except (ValueError, TypeError):
+        return {"error": f"Couldn't parse the date '{date_str}'."}
+
+    last_available = _last_available_date()
+    if last_available is not None and target_date <= last_available:
+        return get_rainfall(place, date_str, date_str)
+    return get_rainfall_forecast(place, date_str)
+
+
+def get_satellite_nowcast():
+    from weather.nowcast_model import predict_nowcast  # lazy: avoids importing torch for callers that never nowcast
+
+    return predict_nowcast()
+
+
 def get_satellite_image(date_str):
     try:
         d = pd.to_datetime(date_str)
@@ -318,7 +453,7 @@ def _supports_tools(name):
     """True/False if we can tell whether `name` supports tool calling, None if unknown
     (e.g. the model was removed between `ollama list` and this check)."""
     try:
-        info = ollama.show(name)
+        info = _client.show(name)
     except Exception:
         return None
     return "tools" in (info.capabilities or [])
@@ -330,7 +465,7 @@ def list_models():
     via tools rather than letting the model guess), so each entry says whether it
     qualifies."""
     try:
-        resp = ollama.list()
+        resp = _client.list()
     except Exception as e:
         raise RuntimeError(
             f"Can't reach Ollama at {os.environ.get('OLLAMA_HOST', 'http://localhost:11434')} "
@@ -355,6 +490,10 @@ def _execute_tool_call(name, tool_input):
             tool_input.get("start_date", ""),
             tool_input.get("end_date"),
         )
+    if name == "get_rainfall_forecast":
+        return get_rainfall_forecast(tool_input.get("place", ""), tool_input.get("date", ""))
+    if name == "get_satellite_nowcast":
+        return get_satellite_nowcast()
     if name == "get_satellite_image":
         return get_satellite_image(tool_input.get("date", ""))
     return {"error": f"Unknown tool '{name}'."}
@@ -386,7 +525,7 @@ def chat(messages, model=None, compute=None):
     options = {"num_gpu": 0} if compute == "cpu" else None
 
     try:
-        ollama.list()
+        _client.list()
     except Exception as e:
         raise RuntimeError(
             f"Can't reach Ollama at {os.environ.get('OLLAMA_HOST', 'http://localhost:11434')} "
@@ -401,11 +540,11 @@ def chat(messages, model=None, compute=None):
 
     working = [{"role": "system", "content": _system_prompt()}] + list(messages)
     images = []
-    tools = [GET_RAINFALL_TOOL, GET_SATELLITE_TOOL]
+    tools = [GET_RAINFALL_TOOL, GET_RAINFALL_FORECAST_TOOL, GET_SATELLITE_NOWCAST_TOOL, GET_SATELLITE_TOOL]
 
     for _ in range(5):  # cap tool round-trips
         try:
-            response = ollama.chat(model=chat_model, messages=working, tools=tools, options=options)
+            response = _client.chat(model=chat_model, messages=working, tools=tools, options=options)
         except Exception as e:
             raise RuntimeError(
                 f"Ollama model '{chat_model}' isn't available — run `ollama pull {chat_model}`. ({e})"

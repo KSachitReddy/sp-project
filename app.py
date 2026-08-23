@@ -1,5 +1,5 @@
 """
-Local server for the India Rainfall map.
+Local server for the AI Predictive Weather Analysis project.
 
 - Serves the interactive map page.
 - GET  /api/years              lists the years available in "data/nc/" for the drawer.
@@ -10,6 +10,15 @@ Local server for the India Rainfall map.
 - GET  /api/satellite/<date>   serves that day's NASA GIBS PNG from
                                 "data/satellite/india_cloud/" (404 if the
                                 downloader never filled in that date).
+- GET  /api/forecast            rainfall (mm) for a place on any date, via
+                                weather.chatbot.get_weather -- observed data for a
+                                date already in the historical record, otherwise a
+                                forecast (a genuine short-range ML forecast within
+                                ~2 weeks of the last available data, a climatology-
+                                based estimate beyond that).
+- GET  /api/nowcast              predicts tomorrow's mean rainfall (mm) per macro-region
+                                of India from the most recent downloaded satellite image,
+                                via weather.nowcast_model's CNN.
 - GET  /chat                   serves the rainfall chatbot page.
 - GET  /api/models             lists Ollama models already pulled locally, for the
                                 chat model picker.
@@ -24,15 +33,15 @@ from pathlib import Path
 
 from flask import Flask, jsonify, request, send_from_directory
 
-from rainfall import chatbot
-from rainfall.nc_convert import NcFormatError, build_payload, save_uploaded_nc
+from weather import chatbot
+from weather.nc_convert import NcFormatError, build_payload, save_uploaded_nc
 
 BASE_DIR = Path(__file__).parent
 DATA_DIR = BASE_DIR / "data" / "rainfall"
 NC_DIR = BASE_DIR / "data" / "nc"
 WEB_DIR = BASE_DIR / "web"
 SATELLITE_DIR = BASE_DIR / "data" / "satellite" / "india_cloud"
-MAP_PAGE = "india_rainfall_2023.html"
+MAP_PAGE = "weather_map.html"
 
 app = Flask(__name__, static_folder=None)
 app.config["MAX_CONTENT_LENGTH"] = 200 * 1024 * 1024  # 200 MB upload cap
@@ -89,6 +98,36 @@ def api_satellite(date_str):
         return jsonify({"error": f"No satellite image for {date_str}."}), 404
 
     return send_from_directory(year_dir, filename)
+
+
+@app.route("/api/forecast")
+def api_forecast():
+    place = request.args.get("place", "")
+    date_str = request.args.get("date", "")
+    if not place or not date_str:
+        return jsonify({"error": "Expected 'place' and 'date' query params."}), 400
+
+    result = chatbot.get_weather(place, date_str)
+    if "error" in result:
+        return jsonify(result), 400
+    return jsonify(result)
+
+
+@app.route("/api/nowcast")
+def api_nowcast():
+    try:
+        from weather.nowcast_model import predict_nowcast  # lazy: torch is an optional install (see pyproject.toml)
+    except ImportError:
+        return jsonify({
+            "error": "Satellite nowcasting isn't available -- torch isn't installed. "
+                     "Run `uv sync --extra torch` (or "
+                     "`pip install torch --extra-index-url https://download.pytorch.org/whl/cpu`) to enable it."
+        }), 503
+
+    result = predict_nowcast()
+    if "error" in result:
+        return jsonify(result), 400
+    return jsonify(result)
 
 
 @app.route("/chat")
@@ -162,5 +201,13 @@ def api_convert():
     return jsonify(payload)
 
 
+def main():
+    # threaded=True so a slow request (e.g. Ollama chat inference) doesn't block
+    # every other request -- the dev server is single-threaded by default.
+    # use_reloader=False: the stat-reloader forks a second full process (double
+    # the RAM) to watch for file changes, not worth it on a memory-constrained machine.
+    app.run(debug=True, port=5050, threaded=True, use_reloader=False)
+
+
 if __name__ == "__main__":
-    app.run(debug=True, port=5050)
+    main()

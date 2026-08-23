@@ -1,9 +1,14 @@
-# Satellite Imagery Dataset (India, 2019–2025)
+# Satellite Imagery Dataset (India, 2019–present)
 
 Daily true-color satellite snapshots over India, downloaded from NASA's GIBS
 service, meant to sit alongside the IMD RF25 rainfall `.nc` data already in
 this repo (same country, comparable timeframe — useful for eyeballing cloud
-cover against recorded rainfall).
+cover against recorded rainfall, and the input imagery for the satellite
+nowcasting model — see the "Forecasting" section of the top-level README).
+
+Unlike IMD's rainfall product (which lags real time by roughly a year), GIBS
+is near-real-time, so this dataset's end date rolls forward automatically:
+re-running the downloader always backfills through yesterday.
 
 ## Data source
 
@@ -53,15 +58,17 @@ is fully regenerable from the script, so it isn't committed. The rainfall
 .venv/bin/python scripts/download_satellite_images.py
 ```
 
-The script walks every date from 2019-01-01 to 2025-12-31. Before downloading
+The script walks every date from 2019-01-01 through yesterday. Before downloading
 a date it checks whether `data/satellite/india_cloud/<year>/<date>.png`
 already exists and skips it if so — so you can `Ctrl+C` at any point and just
 re-run the same command later; it picks up where it left off without
 re-downloading anything.
 
 There's a ~0.7s delay between HTTP requests to avoid hammering the GIBS
-server, so a full 7-year run (2,557 days) takes a while — expect it to run
-for a few hours depending on how many dates need fallback retries.
+server, so a full run from scratch (2,700+ days and growing) takes a while —
+expect it to run for a few hours depending on how many dates need fallback
+retries. A routine re-run to catch up on new days since the last run only
+downloads the gap, so it's much quicker.
 
 At the end it prints a summary: total days in range, how many were already
 present, how many were newly downloaded, how many failed on every layer, and
