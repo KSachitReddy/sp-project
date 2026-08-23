@@ -9,6 +9,9 @@ Unified CLI for Nimbus -- AI Predictive Weather Analysis.
     uv run nimbus forecast --place Mumbai --date 2026-08-25
     uv run nimbus analyse --build                       # precompute real trend/anomaly stats
     uv run nimbus analyse --place Kerala --year 2023
+    uv run nimbus image --date 2023-08-15               # view a downloaded satellite image
+    uv run nimbus nowcast                               # satellite-based CNN prediction for tomorrow
+    uv run nimbus chat                                  # talk to the AI assistant, right in the terminal
     uv run nimbus sync                                  # pull, fetch new imagery, validate, commit + push
     uv run nimbus serve                                 # launch the map + chatbot web app
 """
@@ -183,6 +186,92 @@ def analyse(do_build, place, year, trend_years):
         click.echo(f"Error: {result['error']}", err=True)
         raise SystemExit(1)
     click.echo(json.dumps(result, indent=2))
+
+
+@cli.command()
+@click.option("--date", "date_str", required=True, help="YYYY-MM-DD.")
+def image(date_str):
+    """View the satellite image for a day, if it's been downloaded -- prints
+    the file path and opens it in your default image viewer."""
+    import platform
+    import subprocess as sp
+
+    from weather import chatbot
+
+    result = chatbot.get_satellite_image(date_str)
+    if "error" in result:
+        click.echo(f"Error: {result['error']}", err=True)
+        raise SystemExit(1)
+
+    path = chatbot.SATELLITE_DIR / result["date"][:4] / f"{result['date']}.png"
+    click.echo(str(path))
+
+    opener = "open" if platform.system() == "Darwin" else "xdg-open"
+    try:
+        sp.Popen([opener, str(path)], stdout=sp.DEVNULL, stderr=sp.DEVNULL)
+    except FileNotFoundError:
+        click.echo("(no image viewer found to launch automatically -- open the path above yourself)")
+
+
+@cli.command()
+def nowcast():
+    """Predicts tomorrow's mean rainfall (mm) per macro-region of India from
+    the most recent downloaded satellite image, via the CNN. Needs torch --
+    see `nimbus setup`."""
+    try:
+        from weather.nowcast_model import predict_nowcast
+    except ImportError:
+        click.echo(
+            "torch isn't installed, so the satellite nowcaster isn't available. "
+            "Run `uv sync --extra torch` on a 64-bit CPU with AVX2, then retry.",
+            err=True,
+        )
+        raise SystemExit(1)
+
+    result = predict_nowcast()
+    if "error" in result:
+        click.echo(f"Error: {result['error']}", err=True)
+        raise SystemExit(1)
+    click.echo(json.dumps(result, indent=2))
+
+
+@cli.command()
+@click.option("--model", help="Override the default model for this session (e.g. a specific Ollama model, or leave unset to use the cloud tier if ANTHROPIC_API_KEY is set).")
+def chat(model):
+    """Talk to the AI assistant right in the terminal -- the same three-tier
+    pipeline (fast local parser -> cloud -> local Ollama fallback) the web
+    chat page uses. Type 'exit' or Ctrl+C/Ctrl+D to quit.
+
+    Only the first message in a session gets the instant fast-path treatment
+    -- follow-ups need real conversation context, so they always go through
+    an LLM (cloud, if ANTHROPIC_API_KEY is set; local Ollama otherwise, which
+    is slow -- tens of seconds -- on CPU-only hardware)."""
+    from weather import chatbot as wchatbot
+
+    click.echo("Nimbus chat -- ask about India's rainfall. 'exit' or Ctrl+D to quit.")
+    messages = []
+    while True:
+        try:
+            text = click.prompt("you", prompt_suffix="> ")
+        except (EOFError, click.Abort):
+            click.echo()
+            break
+        if text.strip().lower() in ("exit", "quit"):
+            break
+
+        messages.append({"role": "user", "content": text})
+        try:
+            messages, reply, images = wchatbot.chat(messages, model=model)
+        except RuntimeError as e:
+            click.echo(f"Error: {e}", err=True)
+            messages.pop()
+            continue
+        messages = wchatbot.serialize_messages(messages)
+
+        click.echo(f"nimbus> {reply}")
+        for img in images:
+            path = wchatbot.SATELLITE_DIR / img["date"][:4] / f"{img['date']}.png"
+            click.echo(f"  (image: {path})")
 
 
 @cli.command()

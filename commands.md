@@ -113,6 +113,40 @@ uv run nimbus analyse --place Kerala --year 2023         # month-by-month totals
 uv run nimbus analyse --place Kerala --trend 2018 2025   # year-over-year trend across a range
 ```
 
+### `nimbus image`
+
+Prints the file path of a downloaded satellite image and opens it in your
+default image viewer (a terminal can't render the image itself).
+
+```bash
+uv run nimbus image --date 2023-08-15
+```
+
+### `nimbus nowcast`
+
+The satellite CNN's prediction for tomorrow's mean rainfall per macro-region
+of India, from the most recent downloaded image. Needs torch (`nimbus setup`
+installs it if your CPU supports AVX2).
+
+```bash
+uv run nimbus nowcast
+```
+
+### `nimbus chat`
+
+Talk to the AI assistant right in the terminal — the same three-tier
+pipeline (fast local parser → cloud → local Ollama fallback) the web chat
+page uses.
+
+```bash
+uv run nimbus chat
+```
+
+Only the first message in a session gets the instant fast-path treatment;
+follow-ups always go through an LLM (cloud, if `ANTHROPIC_API_KEY` is set —
+a few seconds; local Ollama otherwise — tens of seconds on CPU-only
+hardware, since it's genuine LLM inference).
+
 ### `nimbus sync`
 
 Pulls the latest committed `models/`/`data/forecast/` state, fetches any new
