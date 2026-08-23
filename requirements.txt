@@ -13,6 +13,7 @@ pillow==12.3.0
 click==8.4.2
 anthropic==1.0.0
 tqdm==4.70.0
+cdsapi==0.7.7
 
 # Satellite nowcaster only -- optional, not required for the map, chatbot, or
 # rainfall forecaster. Skip this on CPUs older than Intel Haswell (4th-gen Core)

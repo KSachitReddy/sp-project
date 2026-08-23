@@ -81,6 +81,32 @@ count of new/failed downloads.
 uv run nimbus download
 ```
 
+### `nimbus params`
+
+Downloads extra weather-prediction parameters neither model currently uses:
+**elevation** for every grid cell (terrain shapes India's rainfall a lot --
+the Western Ghats/Himalayas force monsoon winds upward, which is exactly
+why coastal cells show ~0m and cells 25km inland jump to 600m+) and three
+large-scale climate indices known to modulate the Indian monsoon -- **ENSO**
+(Oceanic Niño Index), **IOD** (Dipole Mode Index), and **MJO** (Madden-Julian
+Oscillation). None of these three need an account or API key. Writes to
+`data/parameters/`.
+
+```bash
+uv run nimbus params
+```
+
+**Not included** (needs your own account -- see below): ERA5 reanalysis
+(temperature/humidity/wind/pressure), the single most valuable addition
+since it's real atmospheric data rather than statistics, but nothing can
+create a Copernicus account for you.
+
+```bash
+# one-time: register free at https://cds.climate.copernicus.eu/, put your
+# API key in ~/.cdsapirc (the script tells you the exact format if it's missing)
+.venv/bin/python scripts/download_era5.py --year 2023
+```
+
 ### `nimbus train`
 
 Trains the rainfall forecaster (LightGBM) and/or the satellite nowcaster
@@ -198,6 +224,9 @@ into directly. Run with `.venv/bin/python scripts/<name>.py`.
 | `train_nowcast_model.py` | What `nimbus train --model satellite` calls — same CNN training. |
 | `generate_forecast_demo.py` | Generates a demo rainfall forecast for every gazetteer place across the rest of the year, written to `data/forecast/forecast_demo.csv`. |
 | `generate_nowcast_report.py` | Validates the satellite nowcaster against real 2025 rainfall (`data/forecast/nowcast_validation_2025.csv`) and generates its 2026 predictions from satellite imagery alone (`data/forecast/nowcast_2026.csv`). |
+| `download_elevation.py` | What `nimbus params` calls for elevation — no account needed. |
+| `download_climate_indices.py` | What `nimbus params` calls for ENSO/IOD/MJO — no account needed. |
+| `download_era5.py --year Y` | ERA5 atmospheric data — needs your own free Copernicus account first (`nimbus params --help` has the setup steps). Not called by `nimbus params`, since it can't succeed without that account. |
 
 ## Environment variables
 

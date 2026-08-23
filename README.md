@@ -34,6 +34,9 @@ scripts/
   train_nowcast_model.py          Train the satellite nowcaster, print backtested accuracy
   generate_forecast_demo.py        Generate a demo rainfall forecast for every gazetteer place
   generate_nowcast_report.py       Validate the nowcaster against real 2025 rainfall + generate 2026 predictions
+  download_elevation.py           Elevation per grid cell -- terrain isn't used by either model yet
+  download_climate_indices.py     ENSO / IOD / MJO -- large-scale monsoon drivers, not yet used by either model
+  download_era5.py                Atmospheric reanalysis (temp/humidity/wind/pressure) -- needs your own CDS account
 web/
   weather_map.html          The map page app.py serves
   chat.html                 The rainfall chatbot page app.py serves
@@ -43,6 +46,7 @@ data/
   places/                   Offline India states/UTs/cities gazetteer used by the chatbot
   satellite/                Downloaded GIBS PNGs + logs (gitignored — regenerable, multi-GB)
   forecast/                 Demo forecast + nowcast validation/prediction CSVs (tracked in git)
+  parameters/               Elevation + climate indices (tracked); ERA5 .nc files (gitignored -- large)
 models/                    Trained models, analysis.db, and metrics JSON (tracked in git — small,
                            `nimbus sync` keeps this current instead of everyone regenerating locally)
 docs/
@@ -80,6 +84,7 @@ with every option and example: **[commands.md](commands.md)**.
 |---|---|
 | `setup` | Detects this machine's hardware and configures accordingly -- installs the satellite nowcaster's torch dependency only if safe, offers swap/page-file guidance on low-RAM machines. Run once after `uv sync`. |
 | `download` | Downloads NASA GIBS satellite imagery (resumable, live progress bar). |
+| `params` | Downloads elevation + ENSO/IOD/MJO climate indices (no account needed) -- see "Weather-prediction parameters" below. |
 | `train` | Trains the rainfall forecaster and/or satellite nowcaster, printing backtested accuracy. |
 | `forecast --place X --date Y` | Rainfall in mm for a place/date -- observed, a real short-range forecast, or an honest climatology estimate, depending how far out. |
 | `analyse` | Real computed trend/anomaly statistics (SQLite-backed) -- `--build` to precompute, then `--place X --year Y` or `--place X --trend START END`. |
@@ -230,6 +235,39 @@ validates it against real 2025 rainfall and generates its 2026 predictions
 from satellite imagery alone; `nimbus sync` extends this into an ongoing
 check, logging each day's prediction and flagging drift once real data
 catches up to it (see "Keeping everything in sync" below).
+
+## Weather-prediction parameters (not yet used by either model)
+
+Both models above currently see only lat/lon, day-of-year, historical
+rainfall, and (for the nowcaster) a satellite image -- no actual atmospheric
+data, and no notion of terrain. Real forecasting skill mostly comes from
+elsewhere, so this downloads the inputs a future iteration would train on:
+
+```bash
+uv run nimbus params
+```
+
+Fetches, no account needed:
+- **Elevation** for every grid cell -- India's rainfall is heavily shaped by
+  terrain (the Western Ghats and Himalayas force monsoon winds upward,
+  dumping far more rain on the windward side); the data bears this out
+  directly -- coastal cells near Mumbai sit at ~0m, cells 25km inland jump
+  past 600m.
+- **ENSO, IOD, and MJO** -- three large-scale climate oscillations with a
+  well-documented relationship to Indian monsoon strength and timing.
+
+**ERA5 reanalysis** (temperature, humidity, wind, pressure -- the single
+most valuable addition, since it's real atmospheric physics rather than
+statistics) needs your own free account -- nothing can create one for you:
+
+```bash
+# one-time: register at https://cds.climate.copernicus.eu/, put your API
+# key in ~/.cdsapirc (the script explains the exact format if it's missing)
+.venv/bin/python scripts/download_era5.py --year 2023
+```
+
+All four are written to `data/parameters/` (elevation/ENSO/IOD/MJO tracked
+in git -- small; ERA5 gitignored -- can be large per year).
 
 ## Rainfall analysis
 

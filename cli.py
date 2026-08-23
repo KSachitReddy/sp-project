@@ -4,6 +4,7 @@ Unified CLI for Nimbus -- AI Predictive Weather Analysis.
     uv sync                                                # base install -- works on any hardware
     uv run nimbus setup                                 # detect hardware, configure accordingly
     uv run nimbus download                              # fetch satellite imagery (resumable)
+    uv run nimbus params                                # fetch elevation + ENSO/IOD/MJO indices (no account needed)
     uv run nimbus train                                 # train both models
     uv run nimbus train --model rainfall
     uv run nimbus forecast --place Mumbai --date 2026-08-25
@@ -120,6 +121,33 @@ def setup(yes):
 def download():
     """Download NASA GIBS satellite imagery into data/satellite/ (resumable -- safe to re-run)."""
     raise SystemExit(subprocess.call([sys.executable, str(SCRIPTS_DIR / "download_satellite_images.py")]))
+
+
+@cli.command()
+def params():
+    """Download extra weather-prediction parameters not currently used by
+    either model: elevation (India's terrain shapes rainfall a lot -- the
+    Western Ghats/Himalayas force monsoon winds upward) and three large-scale
+    climate indices (ENSO, IOD, MJO) known to modulate the Indian monsoon.
+    All three need no account/API key. Writes to data/parameters/.
+
+    ERA5 (temperature/humidity/wind/pressure -- the single most valuable
+    addition, since it's real atmospheric data rather than statistics) isn't
+    included here: it needs your own free Copernicus account, which nothing
+    can set up for you. Once you have one, run:
+        .venv/bin/python scripts/download_era5.py --year 2023
+    """
+    click.echo("=== Elevation (India grid, one-time -- terrain doesn't change) ===")
+    subprocess.call([sys.executable, str(SCRIPTS_DIR / "download_elevation.py")])
+    click.echo()
+    click.echo("=== Climate indices (ENSO / IOD / MJO) ===")
+    subprocess.call([sys.executable, str(SCRIPTS_DIR / "download_climate_indices.py")])
+    click.echo()
+    click.echo(
+        "Done. For ERA5 (temperature/humidity/wind/pressure -- needs your own free "
+        "Copernicus account, see `nimbus params --help`), run:\n"
+        "  .venv/bin/python scripts/download_era5.py --year 2023"
+    )
 
 
 @cli.command()
