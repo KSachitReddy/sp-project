@@ -72,10 +72,13 @@ uv run nimbus setup --yes    # skip prompts for the safe parts (never auto-runs 
 
 ### `nimbus download`
 
-Downloads NASA GIBS satellite imagery into `data/satellite/`. Resumable —
-safe to re-run; only fetches the gap since the last run (2019-01-01 through
-yesterday, rolling). Shows a live progress bar (via `tqdm`) with a running
-count of new/failed downloads.
+Downloads NASA GIBS satellite imagery into `data/satellite/` — **both**
+visible true-color (`india_cloud/`, feeds the CNN nowcaster) and thermal
+infrared brightness temperature (`india_thermal/`, cloud-top temperature —
+see "Thermal rainfall estimate" below). Resumable — safe to re-run; only
+fetches the gap since the last run (2019-01-01 through yesterday, rolling).
+Shows a live progress bar (via `tqdm`) with a running count of new/failed
+downloads, one dataset at a time.
 
 ```bash
 uv run nimbus download
@@ -164,6 +167,23 @@ installs it if your CPU supports AVX2).
 ```bash
 uv run nimbus nowcast
 ```
+
+### `nimbus thermal-estimate`
+
+A *same-day* rainfall estimate per macro-region, from that day's thermal
+satellite image — decodes cloud-top temperature (colder = deeper storm =
+more likely heavy rain) and runs it through a model calibrated against real
+IMD rainfall (`scripts/calibrate_thermal_rainfall.py`). Unlike `forecast`
+and `nowcast`, this needs no anchor date and isn't stuck behind IMD's
+~1-year data lag — it works for any date with a thermal image on disk,
+including today.
+
+```bash
+uv run nimbus thermal-estimate --date 2026-08-21
+```
+
+Needs the thermal backfill (`nimbus download`) and calibration
+(`.venv/bin/python scripts/calibrate_thermal_rainfall.py`) to have run first.
 
 ### `nimbus chat`
 
