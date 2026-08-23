@@ -471,7 +471,10 @@ def get_weather(place, date_str):
 
 
 def get_satellite_nowcast():
-    from weather.nowcast_model import predict_nowcast  # lazy: avoids importing torch for callers that never nowcast
+    try:
+        from weather.nowcast_model import predict_nowcast  # lazy: avoids importing torch for callers that never nowcast
+    except ImportError:
+        return {"error": "Satellite nowcasting isn't available -- torch isn't installed on this machine."}
 
     return predict_nowcast()
 
@@ -525,26 +528,33 @@ def list_models():
 
 
 def _execute_tool_call(name, tool_input):
-    if name == "get_rainfall":
-        return get_rainfall(
-            tool_input.get("place", ""),
-            tool_input.get("start_date", ""),
-            tool_input.get("end_date"),
-        )
-    if name == "get_rainfall_forecast":
-        return get_rainfall_forecast(tool_input.get("place", ""), tool_input.get("date", ""))
-    if name == "get_satellite_nowcast":
-        return get_satellite_nowcast()
-    if name == "get_satellite_image":
-        return get_satellite_image(tool_input.get("date", ""))
-    if name == "get_rainfall_analysis":
-        return get_rainfall_analysis(
-            tool_input.get("place", ""),
-            tool_input.get("year"),
-            tool_input.get("start_year"),
-            tool_input.get("end_year"),
-        )
-    return {"error": f"Unknown tool '{name}'."}
+    """Dispatches to the named tool and always returns a plain dict, even on
+    an unexpected failure -- a bug in one tool (missing dependency, bad
+    input, whatever) should end that turn with an honest error message, not
+    take down the entire chat session with an unhandled traceback."""
+    try:
+        if name == "get_rainfall":
+            return get_rainfall(
+                tool_input.get("place", ""),
+                tool_input.get("start_date", ""),
+                tool_input.get("end_date"),
+            )
+        if name == "get_rainfall_forecast":
+            return get_rainfall_forecast(tool_input.get("place", ""), tool_input.get("date", ""))
+        if name == "get_satellite_nowcast":
+            return get_satellite_nowcast()
+        if name == "get_satellite_image":
+            return get_satellite_image(tool_input.get("date", ""))
+        if name == "get_rainfall_analysis":
+            return get_rainfall_analysis(
+                tool_input.get("place", ""),
+                tool_input.get("year"),
+                tool_input.get("start_year"),
+                tool_input.get("end_year"),
+            )
+        return {"error": f"Unknown tool '{name}'."}
+    except Exception as e:
+        return {"error": f"'{name}' failed unexpectedly ({e})."}
 
 
 def get_rainfall_analysis(place, year=None, start_year=None, end_year=None):
