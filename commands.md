@@ -7,15 +7,22 @@ just the command reference.
 ## Fastest path: one command
 
 ```bash
-./bootstrap.sh
+./bootstrap.sh        # Linux / Mac
+.\bootstrap.ps1        # Windows (PowerShell)
 ```
 
 Installs dependencies, detects your hardware and configures accordingly,
 pulls the latest models/analysis and fetches any new satellite imagery
 (with a live progress bar), then starts the app. Safe to re-run any time.
 It's a thin wrapper around the steps below -- `uv sync` itself deliberately
-can't do this (see "Setup" below for why); this is a normal shell script
-that just runs them in order.
+can't do this (see "Setup" below for why); these are normal scripts that
+just run the steps in order.
+
+If Windows blocks the script with an execution-policy error, run it once
+for just that session (doesn't change your system-wide policy):
+```powershell
+powershell -ExecutionPolicy Bypass -File .\bootstrap.ps1
+```
 
 ## Setup (once, on a new machine)
 

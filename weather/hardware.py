@@ -18,6 +18,19 @@ import subprocess
 MINIMAL_TIER_MHZ = 1400
 
 
+def _run_powershell(command, timeout=4):
+    """Best-effort PowerShell one-liner, or None on any failure. Windows-only
+    callers guard this with platform.system() == "Windows" first."""
+    try:
+        out = subprocess.run(
+            ["powershell", "-NoProfile", "-NonInteractive", "-Command", command],
+            capture_output=True, text=True, timeout=timeout,
+        )
+        return out.stdout.strip() if out.returncode == 0 and out.stdout.strip() else None
+    except Exception:
+        return None
+
+
 def _cpu_mhz():
     """Best-effort peak CPU clock speed in MHz, or None if undeterminable."""
     try:
@@ -37,6 +50,10 @@ def _cpu_mhz():
                 return int(out.stdout.strip()) / 1_000_000
         except Exception:
             pass
+    if platform.system() == "Windows":
+        out = _run_powershell("(Get-CimInstance Win32_Processor).MaxClockSpeed")
+        if out and out.isdigit():
+            return float(out)  # already MHz
     return None
 
 
@@ -58,6 +75,28 @@ def _has_avx2():
 
 
 def _total_ram_gb():
+    if platform.system() == "Windows":
+        # os.sysconf is POSIX-only -- ask the Win32 API directly via ctypes,
+        # no extra dependency needed.
+        try:
+            import ctypes
+
+            class MEMORYSTATUSEX(ctypes.Structure):
+                _fields_ = [
+                    ("dwLength", ctypes.c_ulong), ("dwMemoryLoad", ctypes.c_ulong),
+                    ("ullTotalPhys", ctypes.c_ulonglong), ("ullAvailPhys", ctypes.c_ulonglong),
+                    ("ullTotalPageFile", ctypes.c_ulonglong), ("ullAvailPageFile", ctypes.c_ulonglong),
+                    ("ullTotalVirtual", ctypes.c_ulonglong), ("ullAvailVirtual", ctypes.c_ulonglong),
+                    ("sullAvailExtendedVirtual", ctypes.c_ulonglong),
+                ]
+
+            status = MEMORYSTATUSEX()
+            status.dwLength = ctypes.sizeof(MEMORYSTATUSEX)
+            if ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(status)):
+                return round(status.ullTotalPhys / (1024 ** 3), 1)
+        except Exception:
+            pass
+        return None
     try:
         pages, page_size = os.sysconf("SC_PHYS_PAGES"), os.sysconf("SC_PAGE_SIZE")
         return round(pages * page_size / (1024 ** 3), 1)
@@ -66,6 +105,19 @@ def _total_ram_gb():
 
 
 def _total_swap_gb():
+    if platform.system() == "Windows":
+        # Windows' equivalent of swap is the pagefile, managed very differently
+        # (no fallocate/mkswap/fstab) -- see cli.py's `setup` command, which
+        # gives pagefile guidance instead of trying to configure it directly.
+        out = _run_powershell(
+            "(Get-CimInstance Win32_PageFileUsage | Measure-Object -Property AllocatedBaseSize -Sum).Sum"
+        )
+        if out:
+            try:
+                return round(float(out) / 1024, 1)  # AllocatedBaseSize is MB
+            except ValueError:
+                pass
+        return None
     try:
         with open("/proc/meminfo") as f:
             text = f.read()

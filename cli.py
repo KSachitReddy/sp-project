@@ -16,6 +16,8 @@ Unified CLI for Nimbus -- AI Predictive Weather Analysis.
     uv run nimbus serve                                 # launch the map + chatbot web app
 """
 import json
+import os
+import platform
 import subprocess
 import sys
 from datetime import date
@@ -78,24 +80,37 @@ def setup(yes):
 
     click.echo()
     ram, swap = info["ram_gb"], info["swap_gb"] or 0
+    is_windows = platform.system() == "Windows"
     if ram is not None and ram <= 8 and swap < 8:
         click.echo(
-            f"RAM is {ram} GB with only {swap} GB of swap. A low-RAM machine running Ollama "
-            "and Flask together can hit the kernel's out-of-memory killer with no cushion --\n"
-            "this happened during this project's own development and took down the IDE, not "
-            "just the app."
+            f"RAM is {ram} GB with only {swap} GB of "
+            + ("page file" if is_windows else "swap")
+            + ". A low-RAM machine running Ollama and Flask together can hit an "
+            "out-of-memory situation with no cushion -- this happened during this "
+            "project's own development and took down the IDE, not just the app."
         )
-        size = 12  # GB -- within the 10-15 GB range that's comfortable alongside Ollama
-        swap_cmd = (
-            f"sudo fallocate -l {size}G /swapfile && sudo chmod 600 /swapfile && "
-            f"sudo mkswap /swapfile && sudo swapon /swapfile && "
-            f"echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab"
-        )
-        if not yes and click.confirm(f"Set up a {size} GB swapfile now? (needs sudo -- will prompt for your password)", default=False):
-            subprocess.call(swap_cmd, shell=True)
+        if is_windows:
+            # Windows manages the page file very differently from Linux swap (no
+            # fallocate/mkswap/fstab, and resizing it needs Administrator rights
+            # via a different mechanism) -- guidance only, no auto-run here.
+            click.echo(
+                "Windows usually auto-manages this, but if you want to set it manually:\n"
+                "  Settings -> System -> About -> Advanced system settings ->\n"
+                "  Performance (Settings) -> Advanced -> Virtual memory (Change) --\n"
+                "  set a custom size of 10000-15000 MB, then restart."
+            )
         else:
-            click.echo("Skipped. Run this yourself later if you want it:")
-            click.echo(f"  {swap_cmd}")
+            size = 12  # GB -- within the 10-15 GB range that's comfortable alongside Ollama
+            swap_cmd = (
+                f"sudo fallocate -l {size}G /swapfile && sudo chmod 600 /swapfile && "
+                f"sudo mkswap /swapfile && sudo swapon /swapfile && "
+                f"echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab"
+            )
+            if not yes and click.confirm(f"Set up a {size} GB swapfile now? (needs sudo -- will prompt for your password)", default=False):
+                subprocess.call(swap_cmd, shell=True)
+            else:
+                click.echo("Skipped. Run this yourself later if you want it:")
+                click.echo(f"  {swap_cmd}")
 
     click.echo()
     click.echo("Setup finished. Start the app with: uv run nimbus serve")
@@ -193,9 +208,6 @@ def analyse(do_build, place, year, trend_years):
 def image(date_str):
     """View the satellite image for a day, if it's been downloaded -- prints
     the file path and opens it in your default image viewer."""
-    import platform
-    import subprocess as sp
-
     from weather import chatbot
 
     result = chatbot.get_satellite_image(date_str)
@@ -206,10 +218,13 @@ def image(date_str):
     path = chatbot.SATELLITE_DIR / result["date"][:4] / f"{result['date']}.png"
     click.echo(str(path))
 
-    opener = "open" if platform.system() == "Darwin" else "xdg-open"
     try:
-        sp.Popen([opener, str(path)], stdout=sp.DEVNULL, stderr=sp.DEVNULL)
-    except FileNotFoundError:
+        if platform.system() == "Windows":
+            os.startfile(str(path))  # built-in, no subprocess needed
+        else:
+            opener = "open" if platform.system() == "Darwin" else "xdg-open"
+            subprocess.Popen([opener, str(path)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except (FileNotFoundError, OSError):
         click.echo("(no image viewer found to launch automatically -- open the path above yourself)")
 
 

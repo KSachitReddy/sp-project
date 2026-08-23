@@ -45,7 +45,8 @@ docs/
 Fastest path -- one command, handles everything below automatically:
 
 ```bash
-./bootstrap.sh
+./bootstrap.sh        # Linux / Mac
+.\bootstrap.ps1        # Windows (PowerShell -- see commands.md if it's blocked by execution policy)
 ```
 
 Manual/pip equivalent, if you'd rather not use `uv` or the wrapper script:
