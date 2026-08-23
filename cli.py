@@ -119,7 +119,10 @@ def setup(yes):
 
 @cli.command()
 def download():
-    """Download NASA GIBS satellite imagery into data/satellite/ (resumable -- safe to re-run)."""
+    """Download NASA GIBS satellite imagery into data/satellite/ -- both visible
+    (data/satellite/india_cloud/, feeds the CNN nowcaster) and thermal infrared
+    (data/satellite/india_thermal/, cloud-top temperature -- see weather/thermal_features.py).
+    Resumable -- safe to re-run."""
     raise SystemExit(subprocess.call([sys.executable, str(SCRIPTS_DIR / "download_satellite_images.py")]))
 
 
@@ -272,6 +275,23 @@ def nowcast():
         raise SystemExit(1)
 
     result = predict_nowcast()
+    if "error" in result:
+        click.echo(f"Error: {result['error']}", err=True)
+        raise SystemExit(1)
+    click.echo(json.dumps(result, indent=2))
+
+
+@cli.command()
+@click.option("--date", "date_str", required=True, help="YYYY-MM-DD -- needs a thermal image on disk for that day.")
+def thermal_estimate(date_str):
+    """Same-day rainfall estimate (mm) per macro-region, from that day's
+    thermal satellite image -- unlike `forecast`/`nowcast`, this needs no
+    anchor date and isn't stuck behind IMD's ~1-year data lag, since it
+    never depends on IMD data at inference time. Needs
+    `scripts/calibrate_thermal_rainfall.py` to have been run first."""
+    from weather.thermal_estimate import predict_thermal_rainfall
+
+    result = predict_thermal_rainfall(date_str)
     if "error" in result:
         click.echo(f"Error: {result['error']}", err=True)
         raise SystemExit(1)

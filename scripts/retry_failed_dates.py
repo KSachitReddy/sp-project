@@ -40,7 +40,7 @@ def main():
                 out_path.unlink()
 
             try:
-                content, result = dsi.fetch_day(date_str, log_writer, log_file)
+                content, result = dsi.fetch_day(date_str, dsi.LAYERS, log_writer, log_file)
             except Exception as e:
                 content, result = None, f"unexpected error ({e})"
 
