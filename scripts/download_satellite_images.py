@@ -24,6 +24,7 @@ from datetime import date, timedelta
 from pathlib import Path
 
 import requests
+from tqdm import tqdm
 
 BASE_DIR = Path(__file__).parent.parent
 IMG_DIR = BASE_DIR / "data" / "satellite" / "india_cloud"
@@ -149,12 +150,17 @@ def main():
             log_writer.writerow(["date", "layer_used", "status", "filesize"])
             log_file.flush()
 
-        for i, day in enumerate(daterange(START_DATE, END_DATE), start=1):
+        bar = tqdm(
+            daterange(START_DATE, END_DATE), total=total_days, unit="day",
+            desc="Satellite imagery", dynamic_ncols=True,
+        )
+        for day in bar:
             date_str = day.isoformat()
             out_path = IMG_DIR / str(day.year) / f"{date_str}.png"
 
             if out_path.exists():
                 skip_count += 1
+                bar.set_postfix(new=success_count, failed=len(fail_dates), refresh=False)
                 continue
 
             try:
@@ -163,17 +169,18 @@ def main():
                     out_path.write_bytes(content)
                     success_count += 1
                     layer_success_counts[result] += 1
-                    print(f"Downloaded {i}/{total_days} - {date_str}.png ({result})")
                 else:
                     fail_dates.append(date_str)
                     error_file.write(f"{date_str}: {result}\n")
                     error_file.flush()
-                    print(f"FAILED {i}/{total_days} - {date_str} ({result})")
+                    bar.write(f"FAILED {date_str} ({result})")
             except Exception as e:
                 fail_dates.append(date_str)
                 error_file.write(f"{date_str}: unexpected error ({e})\n")
                 error_file.flush()
-                print(f"FAILED {i}/{total_days} - {date_str} (unexpected error: {e})")
+                bar.write(f"FAILED {date_str} (unexpected error: {e})")
+
+            bar.set_postfix(new=success_count, failed=len(fail_dates), refresh=False)
 
     print()
     print("=== Summary ===")

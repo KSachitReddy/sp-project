@@ -4,12 +4,31 @@ Every way to run this project, in the order you'd typically need them. For
 what each piece actually does, see [README.md](README.md); this file is
 just the command reference.
 
+## Fastest path: one command
+
+```bash
+./bootstrap.sh
+```
+
+Installs dependencies, detects your hardware and configures accordingly,
+pulls the latest models/analysis and fetches any new satellite imagery
+(with a live progress bar), then starts the app. Safe to re-run any time.
+It's a thin wrapper around the steps below -- `uv sync` itself deliberately
+can't do this (see "Setup" below for why); this is a normal shell script
+that just runs them in order.
+
 ## Setup (once, on a new machine)
 
 ```bash
 uv sync                    # base install -- map, chatbot, rainfall forecaster. Works on any hardware.
 uv run nimbus setup        # detect this machine's hardware, decide whether torch/swap are needed
 ```
+
+`uv sync` is a dependency resolver, not a provisioning tool -- it can't run
+`sudo` commands or start multi-GB downloads on its own (and shouldn't: a
+routine "install my dependencies" step silently doing either would be a bad
+surprise, and would break in CI/sandboxed environments). `nimbus setup` is
+the separate step that actually does that part.
 
 `uv sync` alone deliberately skips the satellite nowcaster's `torch`
 dependency — it has no 32-bit build and a documented history of crashing
@@ -48,7 +67,8 @@ uv run nimbus setup --yes    # skip prompts for the safe parts (never auto-runs 
 
 Downloads NASA GIBS satellite imagery into `data/satellite/`. Resumable —
 safe to re-run; only fetches the gap since the last run (2019-01-01 through
-yesterday, rolling).
+yesterday, rolling). Shows a live progress bar (via `tqdm`) with a running
+count of new/failed downloads.
 
 ```bash
 uv run nimbus download
@@ -92,6 +112,23 @@ uv run nimbus analyse --build                           # precompute into models
 uv run nimbus analyse --place Kerala --year 2023         # month-by-month totals + anomaly vs. its own history
 uv run nimbus analyse --place Kerala --trend 2018 2025   # year-over-year trend across a range
 ```
+
+### `nimbus sync`
+
+Pulls the latest committed `models/`/`data/forecast/` state, fetches any new
+satellite imagery (progress bar), logs today's nowcast prediction, validates
+any previously-logged predictions against real data now that it's available
+(flagging drift from the original training backtest), refreshes the
+analysis database, then commits and pushes the result back to the repo.
+
+```bash
+uv run nimbus sync              # commits and pushes automatically
+uv run nimbus sync --no-push    # commit locally, skip the push
+```
+
+Satellite images themselves are never committed — `data/satellite/` stays
+gitignored (multi-GB of regenerable PNGs don't belong in git); only the
+small derived state goes through git.
 
 ### `nimbus serve`
 

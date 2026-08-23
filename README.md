@@ -42,6 +42,14 @@ docs/
 
 ## Setup
 
+Fastest path -- one command, handles everything below automatically:
+
+```bash
+./bootstrap.sh
+```
+
+Manual/pip equivalent, if you'd rather not use `uv` or the wrapper script:
+
 ```bash
 python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt
