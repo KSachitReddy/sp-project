@@ -40,6 +40,13 @@ BBOX = (68, 6, 98, 38)  # lon_min, lat_min, lon_max, lat_max -- matches the down
 # thresholds against real rainfall rather than assuming this one is best.
 COLD_THRESHOLD_K = 220.0
 
+# Tried as separate features and left for the model to weigh, rather than
+# committing to one cutoff up front. Shared by scripts/extract_thermal_features.py
+# (which caches these per image) and scripts/calibrate_thermal_rainfall.py
+# (which trains against them), so both stay in sync automatically.
+THRESHOLDS_K = [200, 210, 220, 230, 240]
+FEATURE_COLS = [f"cold_frac_{t}" for t in THRESHOLDS_K]
+
 
 def _load_lut():
     import pandas as pd
@@ -117,3 +124,18 @@ def cold_fraction_by_region(date_str, threshold_k=COLD_THRESHOLD_K):
     so a fully-obscured region isn't silently treated as "no cold clouds"."""
     result = cold_fractions_multi_threshold(date_str, [threshold_k])
     return result[threshold_k] if result else None
+
+
+def extract_feature_row(date_str):
+    """{region: {feature_col: value}} at THRESHOLDS_K for one day, skipping
+    any region that's fully obscured (rather than imputing it), or None if
+    there's no thermal image for that date at all."""
+    fractions = cold_fractions_multi_threshold(date_str, THRESHOLDS_K)
+    if fractions is None:
+        return None
+    by_region = {}
+    for region in REGIONS:
+        if any(fractions[t][region] is None for t in THRESHOLDS_K):
+            continue
+        by_region[region] = {f"cold_frac_{t}": fractions[t][region] for t in THRESHOLDS_K}
+    return by_region

@@ -14,8 +14,10 @@ including all of 2026.
 
     .venv/bin/python scripts/calibrate_thermal_rainfall.py
 
-Needs scripts/download_satellite_images.py's thermal backfill to have run
-first (data/satellite/india_thermal/). Writes models/thermal_estimate_model.txt
+Needs scripts/extract_thermal_features.py to have been run first (reads its
+cache at data/satellite/thermal_features.csv rather than decoding images
+itself; `nimbus download` runs that extraction step automatically after
+fetching new thermal imagery). Writes models/thermal_estimate_model.txt
 (LightGBM) and models/thermal_estimate_metrics.json (backtested MAE/RMSE vs.
 climatology -- same honesty pattern as every other model in this project:
 a measurement, not a claim).
@@ -38,11 +40,10 @@ from weather import thermal_features as tf  # noqa: E402
 MODELS_DIR = BASE_DIR / "models"
 MODEL_PATH = MODELS_DIR / "thermal_estimate_model.txt"
 METRICS_PATH = MODELS_DIR / "thermal_estimate_metrics.json"
+FEATURES_PATH = BASE_DIR / "data" / "satellite" / "thermal_features.csv"
 
-# Try several deep-convection cutoffs as separate features and let the model
-# learn which ones matter, rather than committing to one threshold up front.
-THRESHOLDS_K = [200, 210, 220, 230, 240]
-FEATURE_COLS = [f"cold_frac_{t}" for t in THRESHOLDS_K]
+THRESHOLDS_K = tf.THRESHOLDS_K
+FEATURE_COLS = tf.FEATURE_COLS
 
 TRAIN_YEARS = range(2019, 2024)
 VAL_YEARS = (2024,)
@@ -51,30 +52,29 @@ TEST_YEARS = (2025,)
 
 def build_dataset():
     """One row per (date, region) with cold-fraction-at-each-threshold
-    features and that region's actual same-day rainfall as the target."""
+    features (from the extraction cache) and that region's actual same-day
+    rainfall as the target."""
+    if not FEATURES_PATH.exists():
+        print(f"{FEATURES_PATH} not found -- run scripts/extract_thermal_features.py first "
+              "(or `uv run nimbus download`, which runs it automatically).")
+        sys.exit(1)
+
+    features = pd.read_csv(FEATURES_PATH, dtype={"date": str})
     regional = sfeat.regional_daily_rainfall(feat.load_rainfall())
     regional.index = pd.to_datetime(regional.index)
 
-    thermal_dates = sorted(p.stem for p in tf.THERMAL_DIR.glob("*/*.png"))
     rows = []
-    for date_str in thermal_dates:
-        date = pd.Timestamp(date_str)
+    for row in features.itertuples(index=False):
+        date = pd.Timestamp(row.date)
         if date not in regional.index:
             continue
-
-        fractions = tf.cold_fractions_multi_threshold(date_str, THRESHOLDS_K)
-        if fractions is None:
+        actual = regional.loc[date, row.region]
+        if pd.isna(actual):
             continue
-
-        for region in sfeat.REGIONS:
-            if any(fractions[t][region] is None for t in THRESHOLDS_K):
-                continue  # region fully obscured that day -- skip rather than impute
-            actual = regional.loc[date, region]
-            if pd.isna(actual):
-                continue
-            row = {"date": date_str, "region": region, "actual_mm": float(actual)}
-            row.update({f"cold_frac_{t}": fractions[t][region] for t in THRESHOLDS_K})
-            rows.append(row)
+        rows.append({
+            "date": row.date, "region": row.region, "actual_mm": float(actual),
+            **{col: getattr(row, col) for col in FEATURE_COLS},
+        })
 
     return pd.DataFrame(rows)
 

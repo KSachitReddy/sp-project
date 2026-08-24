@@ -1,7 +1,7 @@
 {
-  "n_train": 366,
-  "n_val": 0,
-  "n_test": 0,
+  "n_train": 10875,
+  "n_val": 2184,
+  "n_test": 2171,
   "thresholds_k": [
     200,
     210,
@@ -9,5 +9,94 @@
     230,
     240
   ],
-  "by_split": {}
+  "by_split": {
+    "val_2024": {
+      "north": {
+        "n": 366,
+        "mae": 2.373,
+        "rmse": 3.043,
+        "climatology_rmse": 3.266,
+        "skill_vs_climatology": 0.1318
+      },
+      "south": {
+        "n": 366,
+        "mae": 3.237,
+        "rmse": 4.477,
+        "climatology_rmse": 5.496,
+        "skill_vs_climatology": 0.3363
+      },
+      "east": {
+        "n": 362,
+        "mae": 3.472,
+        "rmse": 5.825,
+        "climatology_rmse": 6.818,
+        "skill_vs_climatology": 0.2702
+      },
+      "west": {
+        "n": 366,
+        "mae": 2.265,
+        "rmse": 4.115,
+        "climatology_rmse": 5.909,
+        "skill_vs_climatology": 0.515
+      },
+      "central": {
+        "n": 362,
+        "mae": 2.181,
+        "rmse": 3.449,
+        "climatology_rmse": 5.215,
+        "skill_vs_climatology": 0.5625
+      },
+      "northeast": {
+        "n": 362,
+        "mae": 4.474,
+        "rmse": 7.215,
+        "climatology_rmse": 8.016,
+        "skill_vs_climatology": 0.19
+      }
+    },
+    "test_2025": {
+      "north": {
+        "n": 365,
+        "mae": 2.353,
+        "rmse": 3.181,
+        "climatology_rmse": 3.358,
+        "skill_vs_climatology": 0.1025
+      },
+      "south": {
+        "n": 363,
+        "mae": 3.443,
+        "rmse": 4.31,
+        "climatology_rmse": 5.176,
+        "skill_vs_climatology": 0.3066
+      },
+      "east": {
+        "n": 360,
+        "mae": 3.276,
+        "rmse": 5.12,
+        "climatology_rmse": 6.469,
+        "skill_vs_climatology": 0.3737
+      },
+      "west": {
+        "n": 361,
+        "mae": 2.215,
+        "rmse": 3.536,
+        "climatology_rmse": 5.254,
+        "skill_vs_climatology": 0.5471
+      },
+      "central": {
+        "n": 361,
+        "mae": 1.913,
+        "rmse": 2.904,
+        "climatology_rmse": 5.082,
+        "skill_vs_climatology": 0.6736
+      },
+      "northeast": {
+        "n": 361,
+        "mae": 3.833,
+        "rmse": 6.648,
+        "climatology_rmse": 7.383,
+        "skill_vs_climatology": 0.1891
+      }
+    }
+  }
 }
