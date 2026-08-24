@@ -1,6 +1,7 @@
 """
 Unified CLI for Nimbus -- AI Predictive Weather Analysis.
 
+    uv run nimbus                                        # no subcommand -- interactive menu
     uv sync                                                # base install -- works on any hardware
     uv run nimbus setup                                 # detect hardware, configure accordingly
     uv run nimbus download                              # fetch satellite imagery (resumable)
@@ -30,9 +31,15 @@ BASE_DIR = Path(__file__).parent
 SCRIPTS_DIR = BASE_DIR / "scripts"
 
 
-@click.group()
-def cli():
-    """Nimbus -- AI predictive weather analysis: data, models, and the web app."""
+@click.group(invoke_without_command=True)
+@click.pass_context
+def cli(ctx):
+    """Nimbus -- AI predictive weather analysis: data, models, and the web app.
+
+    Run with no subcommand for an interactive menu. Use a subcommand directly
+    (see --help) for scripting/automation."""
+    if ctx.invoked_subcommand is None:
+        interactive_menu(ctx)
 
 
 @cli.command()
@@ -122,8 +129,14 @@ def download():
     """Download NASA GIBS satellite imagery into data/satellite/ -- both visible
     (data/satellite/india_cloud/, feeds the CNN nowcaster) and thermal infrared
     (data/satellite/india_thermal/, cloud-top temperature -- see weather/thermal_features.py).
-    Resumable -- safe to re-run."""
-    raise SystemExit(subprocess.call([sys.executable, str(SCRIPTS_DIR / "download_satellite_images.py")]))
+    Resumable -- safe to re-run. Afterwards, extracts cold-cloud-fraction
+    features from any new thermal images into data/satellite/thermal_features.csv
+    (see scripts/extract_thermal_features.py), so scripts/calibrate_thermal_rainfall.py
+    always has an up-to-date cache to train against."""
+    rc = subprocess.call([sys.executable, str(SCRIPTS_DIR / "download_satellite_images.py")])
+    if rc == 0:
+        rc = subprocess.call([sys.executable, str(SCRIPTS_DIR / "extract_thermal_features.py")])
+    raise SystemExit(rc)
 
 
 @cli.command()
@@ -358,6 +371,9 @@ def sync(no_push):
     click.echo("=== Checking for new satellite imagery ===")
     subprocess.call([sys.executable, str(SCRIPTS_DIR / "download_satellite_images.py")])
 
+    click.echo("=== Extracting thermal features from any new imagery ===")
+    subprocess.call([sys.executable, str(SCRIPTS_DIR / "extract_thermal_features.py")])
+
     click.echo("=== Logging today's nowcast prediction ===")
     image_date = analysis.log_nowcast_prediction()
     click.echo(f"Logged (image {image_date})." if image_date else "Skipped -- torch not installed, or no recent image.")
@@ -404,6 +420,139 @@ def serve():
     import app
 
     app.main()
+
+
+def _prompt_date(label="Date", default=None):
+    while True:
+        value = click.prompt(f"{label} (YYYY-MM-DD)", default=default)
+        try:
+            date.fromisoformat(value)
+            return value
+        except ValueError:
+            click.echo("Invalid date, try again (e.g. 2023-08-15).")
+
+
+def _menu_download(ctx):
+    ctx.invoke(download)
+
+
+def _menu_params(ctx):
+    ctx.invoke(params)
+
+
+def _menu_train(ctx):
+    model = click.prompt(
+        "Which model?", type=click.Choice(["rainfall", "satellite", "all"]), default="all",
+    )
+    ctx.invoke(train, model=model)
+
+
+def _menu_forecast(ctx):
+    place = click.prompt("Place (state/UT/city)")
+    date_str = _prompt_date(default=date.today().isoformat())
+    ctx.invoke(forecast, place=place, date_str=date_str)
+
+
+def _menu_analyse(ctx):
+    mode = click.prompt(
+        "Build the database, a yearly summary, or a trend?",
+        type=click.Choice(["build", "summary", "trend"]), default="summary",
+    )
+    if mode == "build":
+        ctx.invoke(analyse, do_build=True, place=None, year=None, trend_years=None)
+        return
+    place = click.prompt("Place (state/UT/city)")
+    if mode == "summary":
+        year = click.prompt("Year", type=int, default=date.today().year)
+        ctx.invoke(analyse, do_build=False, place=place, year=year, trend_years=None)
+    else:
+        start = click.prompt("Start year", type=int)
+        end = click.prompt("End year", type=int, default=date.today().year)
+        ctx.invoke(analyse, do_build=False, place=place, year=None, trend_years=(start, end))
+
+
+def _menu_image(ctx):
+    date_str = _prompt_date()
+    ctx.invoke(image, date_str=date_str)
+
+
+def _menu_nowcast(ctx):
+    ctx.invoke(nowcast)
+
+
+def _menu_thermal_estimate(ctx):
+    date_str = _prompt_date()
+    ctx.invoke(thermal_estimate, date_str=date_str)
+
+
+def _menu_chat(ctx):
+    ctx.invoke(chat, model=None)
+
+
+def _menu_sync(ctx):
+    push = click.confirm("Push to remote after committing?", default=True)
+    ctx.invoke(sync, no_push=not push)
+
+
+def _menu_serve(ctx):
+    click.echo("Starting the web app -- press Ctrl+C to stop and return to the menu.")
+    ctx.invoke(serve)
+
+
+def _menu_setup(ctx):
+    ctx.invoke(setup, yes=False)
+
+
+MENU = [
+    ("1", "Download satellite imagery", _menu_download),
+    ("2", "Download extra parameters (elevation, ENSO/IOD/MJO)", _menu_params),
+    ("3", "Train models", _menu_train),
+    ("4", "Forecast rainfall for a place/date", _menu_forecast),
+    ("5", "Analyse rainfall trends", _menu_analyse),
+    ("6", "View a satellite image", _menu_image),
+    ("7", "Nowcast tomorrow's rainfall (CNN)", _menu_nowcast),
+    ("8", "Thermal same-day rainfall estimate", _menu_thermal_estimate),
+    ("9", "Chat with the AI assistant", _menu_chat),
+    ("10", "Sync (pull, download, validate, commit+push)", _menu_sync),
+    ("11", "Serve the web app", _menu_serve),
+    ("12", "Hardware setup", _menu_setup),
+]
+
+
+def interactive_menu(ctx):
+    """Numbered menu wrapping every subcommand -- prompts for whatever each
+    one needs instead of requiring flags to be typed out. Falls back to
+    normal Click subcommands (`nimbus <command> --help`) for scripting."""
+    click.echo("=== Nimbus -- AI Predictive Weather Analysis ===")
+    while True:
+        click.echo()
+        for key, label, _ in MENU:
+            click.echo(f"  {key}) {label}")
+        click.echo("  0) Exit")
+        try:
+            choice = click.prompt("\nChoice", default="0", show_default=False).strip()
+        except (EOFError, click.Abort):
+            click.echo()
+            break
+
+        if choice in ("0", "q", "exit", "quit"):
+            break
+
+        action = next((fn for key, _, fn in MENU if key == choice), None)
+        if action is None:
+            click.echo("Not a valid choice.")
+            continue
+
+        try:
+            action(ctx)
+        except (EOFError, click.Abort):
+            click.echo()
+        except SystemExit:
+            pass
+        except KeyboardInterrupt:
+            click.echo("\n(cancelled)")
+        except Exception as e:
+            click.echo(f"Error: {e}", err=True)
 
 
 def main():
