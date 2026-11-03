@@ -66,21 +66,38 @@ def regional_daily_rainfall(rainfall_df):
     return regional.reindex(columns=REGIONS)
 
 
+def _cache_key(image_dates, rainfall_df):
+    """What the cached arrays were built from: the image size, which images were
+    on disk (count + first/last date), and how much rainfall (label) data there
+    was. Any change -- new imagery, a deleted image, a new rainfall year --
+    invalidates the cache instead of silently reusing stale arrays."""
+    return {
+        "image_size": np.array(IMAGE_SIZE),
+        "n_image_dates": np.array(len(image_dates)),
+        "first_image_date": np.array(image_dates[0] if image_dates else ""),
+        "last_image_date": np.array(image_dates[-1] if image_dates else ""),
+        "n_rainfall_rows": np.array(len(rainfall_df)),
+        "last_rainfall_date": np.array(str(pd.Timestamp(rainfall_df["date"].max()).date())),
+    }
+
+
 def build_dataset(rainfall_df, use_cache=True):
     """X: (N, 3, H, W) float32 -- day d's image. Y: (N, len(REGIONS)) float32
     -- day d+1's mean regional rainfall. dates: DatetimeIndex of day d for
     each row. Decoding/resizing ~2,500 PNGs takes a while, so the result is
-    cached to disk and reused as long as IMAGE_SIZE hasn't changed."""
+    cached to disk and reused only while _cache_key() still matches."""
+    image_dates = available_image_dates()
+    key = _cache_key(image_dates, rainfall_df)
     if use_cache and CACHE_PATH.exists():
         cached = np.load(CACHE_PATH, allow_pickle=True)
-        if tuple(cached["image_size"]) == IMAGE_SIZE:
+        if all(k in cached.files and np.array_equal(cached[k], v) for k, v in key.items()):
             return cached["X"], cached["Y"], pd.DatetimeIndex(cached["dates"])
 
     regional = regional_daily_rainfall(rainfall_df)
     regional.index = pd.to_datetime(regional.index)
 
     xs, ys, ds = [], [], []
-    for date_str in available_image_dates():
+    for date_str in image_dates:
         d = pd.Timestamp(date_str)
         next_d = d + pd.Timedelta(days=1)
         if next_d not in regional.index:
@@ -101,9 +118,5 @@ def build_dataset(rainfall_df, use_cache=True):
 
     if use_cache:
         CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
-        np.savez(
-            CACHE_PATH, X=X, Y=Y,
-            dates=dates.astype(str).to_numpy(),
-            image_size=np.array(IMAGE_SIZE),
-        )
+        np.savez(CACHE_PATH, X=X, Y=Y, dates=dates.astype(str).to_numpy(), **key)
     return X, Y, dates

@@ -25,6 +25,17 @@ _ANALYSIS_WORDS = ("analyse", "analyze", "trend", "compare", "why", "explain", "
 _DATE_RE = re.compile(r"\d{4}-\d{2}-\d{2}")
 
 
+def method_label(result):
+    """Short human label for a forecast result's 'method', so no predicted
+    number is ever shown without saying what produced it. Shared with the CLI."""
+    region = result.get("region")
+    return {
+        "ml_short_range": "ML forecast",
+        "satellite_nowcast": f"satellite nowcast, {region} avg",
+        "satellite_thermal": f"thermal estimate, {region} avg",
+    }.get(result.get("method"), "historical average")
+
+
 def _find_place(text):
     """The gazetteer place whose name/alias appears in `text` as a whole word,
     preferring the longest match. Returns None if nothing matches.
@@ -102,13 +113,7 @@ def try_fast_reply(text):
         result = chatbot.get_rainfall_forecast(place["name"], str(target))
         if "error" in result:
             return None  # e.g. a historical date phrased as "will it rain" -- let the LLM sort it out
-        caveat = {
-            "ml_short_range": "",
-            "satellite_nowcast": f" (satellite nowcast from the {result.get('image_date')} image, "
-                                 f"{result.get('region')} India regional average)",
-            "satellite_thermal": f" (same-day thermal satellite estimate, {result.get('region')} India regional average)",
-        }.get(result["method"], " (historical average, not a real forecast)")
-        reply = f"{result['matched_place']}, {result['target_date']}: {result['predicted_mm']} mm{caveat}"
+        reply = f"{result['matched_place']}, {result['target_date']}: {result['predicted_mm']} mm ({method_label(result)})"
         if "latest_satellite_nowcast" in result:
             latest = result["latest_satellite_nowcast"]
             reply += (f"\nNo satellite image covers that date yet -- the latest satellite nowcast is "
@@ -118,4 +123,4 @@ def try_fast_reply(text):
     result = chatbot.get_rainfall(place["name"], str(target), str(target))
     if "error" in result:
         return None
-    return f"{result['matched_place']}, {target}: {result['total_rainfall_mm']} mm", []
+    return f"{result['matched_place']}, {target}: {result['total_rainfall_mm']} mm (observed)", []

@@ -116,6 +116,7 @@ def train(epochs=40, batch_size=64, lr=1e-3, patience=8, seed=0):
     loss_fn = nn.MSELoss()
 
     best_val, best_state, bad_epochs = float("inf"), None, 0
+    history = []  # per-epoch losses, saved to the metrics JSON as overfitting evidence
     n = len(Xtr)
     for epoch in range(epochs):
         model.train()
@@ -134,6 +135,7 @@ def train(epochs=40, batch_size=64, lr=1e-3, patience=8, seed=0):
         with torch.no_grad():
             val_loss = loss_fn(model(Xval), Yval).item()
         print(f"epoch {epoch + 1}/{epochs}  train_mse(log)={total_loss / n:.4f}  val_mse(log)={val_loss:.4f}")
+        history.append({"epoch": epoch + 1, "train_mse_log": round(total_loss / n, 4), "val_mse_log": round(val_loss, 4)})
 
         if val_loss < best_val - 1e-5:
             best_val, bad_epochs = val_loss, 0
@@ -158,6 +160,8 @@ def train(epochs=40, batch_size=64, lr=1e-3, patience=8, seed=0):
             "val_2024": _evaluate(model, X[val_mask], Y[val_mask], dates[val_mask], regional, climatology),
             "test_2025": _evaluate(model, X[test_mask], Y[test_mask], dates[test_mask], regional, climatology),
         },
+        "best_epoch": min(history, key=lambda h: h["val_mse_log"])["epoch"],
+        "history": history,
     }
 
     MODELS_DIR.mkdir(exist_ok=True)

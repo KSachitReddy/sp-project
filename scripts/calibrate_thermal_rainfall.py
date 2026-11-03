@@ -80,8 +80,10 @@ def build_dataset():
 
 
 def _evaluate(booster, df):
-    """MAE/RMSE per region, plus skill vs. that region's climatology for the
-    same day-of-year -- the same honesty bar every other model here has to clear."""
+    """MAE/RMSE per region, plus skill vs. a flat baseline: that region's mean
+    actual rainfall over the split being evaluated (`df` itself) -- not a
+    day-of-year climatology and not the training-set mean, so this skill is not
+    directly comparable to the other models' climatology skill."""
     preds = booster.predict(df[FEATURE_COLS])
     df = df.assign(pred_mm=np.clip(preds, 0, None))
     doy = pd.to_datetime(df["date"]).dt.dayofyear
@@ -92,8 +94,8 @@ def _evaluate(booster, df):
         if mask.sum() == 0:
             continue
         y, p = df.loc[mask, "actual_mm"].to_numpy(), df.loc[mask, "pred_mm"].to_numpy()
-        # climatology baseline: this region's mean actual rainfall in the training set (a flat baseline,
-        # not day-of-year-specific -- the dataset's too small yet to support a finer one honestly)
+        # flat baseline: this region's mean actual rainfall over the evaluated split itself (not the
+        # training set, not day-of-year-specific). `doy` above is currently unused.
         clim = float(df.loc[df["region"] == region, "actual_mm"].mean())
         mse = float(np.mean((y - p) ** 2))
         clim_mse = float(np.mean((y - clim) ** 2))

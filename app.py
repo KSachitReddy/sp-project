@@ -233,7 +233,9 @@ def main():
     # every other request -- the dev server is single-threaded by default.
     # use_reloader=False: the stat-reloader forks a second full process (double
     # the RAM) to watch for file changes, not worth it on a memory-constrained machine.
-    app.run(debug=True, port=5050, threaded=True, use_reloader=False)
+    # debug is opt-in (NIMBUS_DEBUG=1): the Werkzeug debugger allows arbitrary
+    # code execution from the browser, so it must never be on by default.
+    app.run(debug=os.environ.get("NIMBUS_DEBUG") == "1", port=5050, threaded=True, use_reloader=False)
 
 
 if __name__ == "__main__":

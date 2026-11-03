@@ -236,6 +236,82 @@ from satellite imagery alone; `nimbus sync` extends this into an ongoing
 check, logging each day's prediction and flagging drift once real data
 catches up to it (see "Keeping everything in sync" below).
 
+## Limitations & honest results
+
+All numbers below are measured on held-out data. Rainfall forecaster figures come from
+`models/forecast_eval_report.json` (`uv run python scripts/evaluate_forecast.py`,
+which first re-checks `forecast_model_metrics.json` exactly). Nowcaster seed figures
+are in `docs/cnn_seed_stability.md`.
+
+**Rainfall forecaster (test 2024–2025)**
+
+- **Skill is small and depends on the metric.** Skill vs climatology on squared
+  error (the number in `forecast_model_metrics.json`) is +0.034 / +0.021 / +0.015 /
+  +0.010 at 1 / 3 / 7 / 14 days. On absolute error it is **negative** at every
+  horizon: −0.040 / −0.047 / −0.050 / −0.050. Bootstrap 95% CIs of the squared-error
+  skill exclude zero (h1 [0.026, 0.043], h14 [0.003, 0.018]). They resample whole
+  dates but ignore day-to-day autocorrelation, so they are somewhat too narrow.
+- **Mostly climatology.** Early stopping kept 28 trees, and `climatology_mm`
+  carries 71% of feature gain. The model beats persistence comfortably (squared-error
+  skill +0.25 at 1 day, +0.48 at 14 days), but persistence is a weak baseline for
+  daily rain.
+- **Heavy rain is badly under-predicted.** On days with ≥50 mm observed (mean 80.2 mm),
+  the 1-day forecast averages 11.6 mm. The largest prediction is 89 mm; the largest
+  observation is 389 mm.
+- **Drizzle bias on dry days.** 70% of target cell-days are exactly 0 mm. The model
+  never predicts below 0.1 mm and averages 2.1 mm on dry days.
+- **Rain/no-rain detection is worse than climatology on CSI.** At ≥1 mm the model's
+  CSI is 0.320 vs climatology's 0.390. At ≥10 mm it is 0.181 vs 0.205, with POD 0.246
+  vs 0.328. Ranking is slightly better (ROC-AUC 0.849 vs 0.831 at ≥1 mm).
+- **Negative in winter.** For December–February, 1-day squared-error skill is
+  −0.025, with a +0.76 mm bias.
+- Rainfall for 2023-10-12 is missing for 79 Gujarat cells. Lag features are
+  positional, so those cells' lags are one day off for the rest of 2023 (the
+  validation year).
+
+**Satellite nowcaster (CNN, test 2025)**
+
+- **West India loses to persistence on every seed.** Squared-error skill vs persistence
+  is −0.385 for the committed seed, and −0.165 and −0.280 for seeds 1 and 2.
+- **Northeast correction.** In the committed metrics, northeast skill vs persistence
+  is +0.140 on **test**. The −0.077 figure is the 2024 **validation** split, and
+  validation northeast is negative on 2 of 3 seeds.
+- **Results move with the seed.** East ranges 0.016–0.161 vs persistence and central
+  0.024–0.173. The committed metrics are a single seed (0).
+- **Climatology is beaten everywhere.** Squared-error skill vs climatology is
+  0.22–0.53 in every region, on every seed.
+- **Small and unregularised.** It has 260,550 parameters (94% in one dense layer) and
+  trains on 1,826 images, with no dropout, batch norm or augmentation. At the best
+  epoch, train MSE (log space) is 0.146 vs validation 0.231.
+
+**Thermal estimate.** Its "climatology" baseline is flat: the region's mean rainfall
+over the split being evaluated, not a day-of-year climatology. Its skill numbers
+therefore aren't comparable to the other two models'.
+
+**Demo forecast.** In `data/forecast/forecast_demo.csv`, 78.1% of rows (5,850 of
+7,488) are `climatology_outlook`. ML forecasts cover only 2026-01-01..14. The CSV
+was generated before forecasts were routed to the satellite models, so the live
+app now returns `satellite_nowcast` for some dates the CSV labels climatology.
+
+**Resources and platforms**
+
+- Peak RAM: the web server reaches about 2.0 GB once forecast data is cached.
+  Forecaster retraining peaks at 3.8 GB, `evaluate_forecast.py` at 3.5 GB, and CNN
+  training at 2.4 GB.
+- Latency: the first forecast request takes about 11 s while 14.5M rows load; after
+  that, the median is about 90 ms (see `models/benchmark.json`).
+- Without torch, the app degrades cleanly (verified in a torch-less environment):
+  `/api/nowcast` returns 503 and forecasts fall back to thermal or climatology.
+- **Not verified:** running on Windows, and on a real CPU without AVX2.
+
+**App behaviour to be aware of**
+
+- `/api/nowcast` (and the map's nowcast card) needs a satellite image from the last
+  7 days. Run `uv run nimbus download` before a demo.
+- `POST /api/convert` writes the uploaded file to `data/nc/` and **overwrites**
+  `data/rainfall/rainfall_<year>.csv` for that year without confirmation, and that
+  CSV is training/test data. Only upload years you intend to replace.
+
 ## Weather-prediction parameters (not yet used by either model)
 
 Both models above currently see only lat/lon, day-of-year, historical

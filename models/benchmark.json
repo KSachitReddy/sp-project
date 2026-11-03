@@ -1,0 +1,79 @@
+{
+  "cold_start_first_forecast_ms": 10954.2,
+  "cold_start_status": 200,
+  "endpoints": {
+    "forecast_ml_short_range": {
+      "n": 50,
+      "median_ms": 88.9,
+      "p95_ms": 110.9,
+      "status_codes": {
+        "200": 50
+      }
+    },
+    "forecast_satellite": {
+      "n": 50,
+      "median_ms": 93.8,
+      "p95_ms": 159.1,
+      "status_codes": {
+        "200": 50
+      }
+    },
+    "forecast_climatology": {
+      "n": 50,
+      "median_ms": 47.6,
+      "p95_ms": 64.1,
+      "status_codes": {
+        "200": 50
+      }
+    },
+    "observed_lookup": {
+      "n": 50,
+      "median_ms": 23.7,
+      "p95_ms": 36.1,
+      "status_codes": {
+        "200": 50
+      }
+    },
+    "analysis": {
+      "n": 50,
+      "median_ms": 2.6,
+      "p95_ms": 3.3,
+      "status_codes": {
+        "200": 50
+      }
+    },
+    "year_payload": {
+      "n": 3,
+      "median_ms": 3066.7,
+      "p95_ms": 3118.3,
+      "status_codes": {
+        "200": 3
+      }
+    }
+  },
+  "cnn_nowcast_inference": {
+    "cold_ms": 56.1,
+    "n": 20,
+    "median_ms": 46.8,
+    "p95_ms": 56.4,
+    "status_codes": {
+      "200": 20
+    }
+  },
+  "peak_rss_mb": 1943,
+  "model_sizes_bytes": {
+    "climatology.csv": 55989731,
+    "forecast_model.txt": 163187,
+    "nowcast_model.pt": 1046693,
+    "thermal_estimate_model.txt": 118604
+  },
+  "machine": {
+    "python": "3.13.5",
+    "os": "Linux-6.12.113+deb13-amd64-x86_64-with-glibc2.41",
+    "cores": 4,
+    "cpu_mhz": 3390.505,
+    "ram_gb": 7.7,
+    "avx2": true,
+    "tier": "capable"
+  }
+}

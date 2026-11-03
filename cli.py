@@ -206,6 +206,7 @@ def forecast(place, date_str):
     """Rainfall (mm) for a place on a given date -- observed if it's in the historical
     record, predicted (ML short-range or climatology) otherwise."""
     from weather import chatbot
+    from weather.fast_intent import method_label
 
     result = chatbot.get_weather(place, date_str)
     if "error" in result:
@@ -213,10 +214,9 @@ def forecast(place, date_str):
         raise SystemExit(1)
 
     if "predicted_mm" in result:
-        caveat = "  (rough estimate -- might not be accurate)" if result["method"] == "climatology_outlook" else ""
-        click.echo(f"{result['matched_place']}, {result['target_date']}: {result['predicted_mm']} mm{caveat}")
+        click.echo(f"{result['matched_place']}, {result['target_date']}: {result['predicted_mm']} mm ({method_label(result)})")
     else:
-        click.echo(f"{result['matched_place']}, {result['start_date']}: {result['total_rainfall_mm']} mm")
+        click.echo(f"{result['matched_place']}, {result['start_date']}: {result['total_rainfall_mm']} mm (observed)")
 
 
 @cli.command()
