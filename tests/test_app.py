@@ -50,3 +50,34 @@ def test_convert_rejects_missing_and_invalid_files(client):
 def test_years_lists_available_data(client):
     years = client.get("/api/years").get_json()["years"]
     assert years == sorted(years) and 2018 in years
+
+
+@pytest.mark.parametrize("method, url, status", [
+    ("get", "/api/year/abc", 404), ("get", "/api/does-not-exist", 404), ("get", "/api/chat", 405),
+])
+def test_api_errors_are_json(client, method, url, status):
+    r = getattr(client, method)(url)
+    assert r.status_code == status and r.is_json and "error" in r.get_json()
+
+
+def test_page_404_stays_html(client):
+    r = client.get("/no-such-page")
+    assert r.status_code == 404 and not r.is_json
+
+
+def test_observed_response_says_observed_and_is_otherwise_unchanged():
+    from weather import chatbot
+    weather = chatbot.get_weather("Mumbai", "2024-07-10")
+    assert weather.pop("method") == "observed"
+    assert weather == chatbot.get_rainfall("Mumbai", "2024-07-10", "2024-07-10")
+
+
+def test_forecast_date_defaults_to_today(monkeypatch):
+    from datetime import date
+    from click.testing import CliRunner
+    import cli
+    from weather import chatbot
+    seen = {}
+    monkeypatch.setattr(chatbot, "get_weather", lambda place, d: seen.update(place=place, date=d) or {"error": "stub"})
+    CliRunner().invoke(cli.cli, ["forecast", "--place", "Mumbai"])
+    assert seen == {"place": "Mumbai", "date": date.today().isoformat()}

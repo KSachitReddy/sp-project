@@ -16,7 +16,26 @@ FAR_FUTURE = "2099-01-01"  # never has imagery on disk
 
 
 def test_thermal_estimate_rejects_impossible_date():
-    assert "Invalid date" in predict_thermal_rainfall("2026-02-30")["error"]
+    assert predict_thermal_rainfall("2026-02-30") == {"error": "Couldn't parse the date '2026-02-30'."}
+
+
+def test_one_date_parser_everywhere():
+    ts, error = chatbot.parse_date("2024-07-10")
+    assert error is None and str(ts.date()) == "2024-07-10"
+    expected = {"error": "Couldn't parse the date '2026-02-30'."}
+    assert chatbot.parse_date("2026-02-30") == (None, expected)
+    assert chatbot.get_weather("Mumbai", "2026-02-30") == expected
+    assert chatbot.get_satellite_image("2026-02-30") == expected
+    assert predict_thermal_rainfall("2026-02-30") == expected
+
+
+@pytest.mark.parametrize("url, message", [
+    ("/api/satellite/2026-02-30", "Couldn't parse the date '2026-02-30'."),
+    ("/api/satellite/xyz", "Couldn't parse the date 'xyz' -- expected YYYY-MM-DD."),
+])
+def test_satellite_endpoint_bad_dates(url, message):
+    r = nimbus_app.app.test_client().get(url)
+    assert r.status_code == 400 and r.get_json() == {"error": message}
 
 
 def test_thermal_estimate_missing_image_says_how_to_fix():

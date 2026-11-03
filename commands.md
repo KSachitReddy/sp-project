@@ -202,18 +202,22 @@ hardware, since it's genuine LLM inference).
 
 ### `nimbus sync`
 
-Pulls the latest committed `models/`/`data/forecast/` state, fetches any new
-satellite imagery (progress bar), logs today's nowcast prediction, validates
-any previously-logged predictions against real data now that it's available
-(flagging drift from the original training backtest), refreshes the
-analysis database, then commits and pushes the result back to the repo.
+Fast-forwards to the latest committed state (`git pull --ff-only`) and fetches
+any new satellite imagery (progress bar; ~10 GB the first time). By default it
+never writes tracked files, commits, or pushes.
+
+`--push` is for maintainers. It also extracts thermal features from the new
+imagery, logs today's nowcast prediction, and validates earlier predictions
+against real data now that it's available (flagging drift from the training
+backtest). It then refreshes the analysis database, commits `models/`,
+`data/forecast/` and the thermal features, and pushes.
 
 ```bash
-uv run nimbus sync              # commits and pushes automatically
-uv run nimbus sync --no-push    # commit locally, skip the push
+uv run nimbus sync              # pull + download imagery; never commits or pushes
+uv run nimbus sync --push       # maintainers: refresh derived state, commit and push
 ```
 
-Satellite images themselves are never committed — `data/satellite/` stays
+Satellite images themselves are never committed. `data/satellite/` stays
 gitignored (multi-GB of regenerable PNGs don't belong in git); only the
 small derived state goes through git.
 
@@ -242,7 +246,6 @@ into directly. Run with `.venv/bin/python scripts/<name>.py`.
 | Script | What it does |
 |---|---|
 | `convert_all.py` | Batch-converts every `.nc` file in `data/nc/` to `data/rainfall/rainfall_<year>.csv`. |
-| `extract.py` | One-off extractor: `RF25_ind2023_rfp25.nc` → `rainfall_2023.csv` + a compact `rainfall_2023.json` for the map's client-side rendering. |
 | `download_satellite_images.py` | What `nimbus download` calls — same resumable GIBS downloader. |
 | `verify_satellite_images.py` | Checks every expected satellite image date for a present, non-corrupt PNG; writes a completeness report and a list of gaps to retry. |
 | `retry_failed_dates.py` | Re-attempts only the dates `verify_satellite_images.py` flagged as missing/corrupt. |

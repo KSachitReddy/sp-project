@@ -34,7 +34,6 @@ import json
 import os
 import re
 import tempfile
-from datetime import date
 from pathlib import Path
 
 from flask import Flask, jsonify, request, send_from_directory
@@ -59,6 +58,16 @@ DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 def _find_nc_for_year(year):
     matches = sorted(NC_DIR.glob(f"*{year}*.nc"))
     return matches[0] if matches else None
+
+
+@app.errorhandler(404)
+@app.errorhandler(405)
+def api_json_errors(e):
+    """API clients get JSON errors (e.g. /api/year/abc, /api/unknown, GET on a
+    POST-only route); page routes keep Flask's default HTML error page."""
+    if request.path.startswith("/api/"):
+        return jsonify({"error": f"{e.name}: {request.method} {request.path}"}), e.code
+    return e
 
 
 @app.route("/")
@@ -95,12 +104,12 @@ def api_year(year):
 
 @app.route("/api/satellite/<date_str>")
 def api_satellite(date_str):
+    # The regex also keeps anything path-like out of the file lookup below.
     if not DATE_RE.match(date_str):
-        return jsonify({"error": "Invalid date, expected YYYY-MM-DD."}), 400
-    try:
-        date.fromisoformat(date_str)
-    except ValueError:
-        return jsonify({"error": f"Invalid date '{date_str}' -- not a real calendar date."}), 400
+        return jsonify({"error": f"Couldn't parse the date '{date_str}' -- expected YYYY-MM-DD."}), 400
+    _, error = chatbot.parse_date(date_str)
+    if error:
+        return jsonify(error), 400
 
     year_dir = SATELLITE_DIR / date_str[:4]
     filename = f"{date_str}.png"

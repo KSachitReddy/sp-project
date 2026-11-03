@@ -13,8 +13,9 @@
 #
 #   1. uv sync            -- install dependencies (fast, no side effects)
 #   2. nimbus setup --yes -- detect hardware, install torch if safe, offer swap
-#   3. nimbus sync         -- pull latest models/analysis, fetch new satellite
-#                             imagery (progress bar), validate, commit + push
+#   3. nimbus sync         -- fast-forward pull + fetch new satellite imagery
+#                             (progress bar, ~10 GB first time); never commits
+#                             or pushes (that needs `nimbus sync --push`)
 #   4. nimbus serve         -- launch the app
 #
 # Safe to re-run any time -- every step is idempotent.

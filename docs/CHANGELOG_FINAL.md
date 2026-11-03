@@ -66,3 +66,72 @@ Follow-up to the QA pass on `v1.0-submission`. No retraining; `models/` and all 
 5. **Limitations**: Windows and Apple Silicon are never offered torch (`_has_avx2()` has no Windows branch; Apple Silicon has no AVX2), and `bootstrap.ps1` doesn't check `$LASTEXITCODE`.
 6. **Error messages**: `thermal-estimate --date 2026-02-30` and `/api/satellite/2026-02-30` now report an invalid date (previously "no image"). `nimbus image`, `nimbus nowcast`, `thermal-estimate` and `/api/satellite` say "run `nimbus download`" when imagery is missing. `/api/satellite/2025-13-45` is now 400 (invalid date), not 404.
 - Tests: new `tests/test_error_messages.py` (8 tests: invalid date, `nimbus download` hints, both scripts import with `resource` unavailable); `tests/test_app.py` expectations updated. `uv run pytest -q` -> 49 passed. Mutation check: restoring a bare `import resource` makes the Windows-import test fail (then restored).
+
+## Simplicity pass (code)
+
+Regression guard (scratchpad, not in repo): CLI `forecast` for Mumbai/Chennai 2026-01-05, Mumbai 2024-07-10, Kerala 2030-07-10; the same four via `/api/forecast`; `/api/analysis?place=Kerala&year=2024`; `/api/models`; the chat fast path; sha256 of every file in `models/`. Re-run after every step. The only allowed difference is the additive `"method": "observed"` key from step 2d.
+
+### Step 0 — incident before starting
+- At 23:07 something outside this session ran `nimbus sync`. It committed `c25cfa8 "Automated sync: 2026-11-03"` (models/analysis.db) on `final-submission`, downloaded new imagery, and rewrote `data/satellite/thermal_features.csv`. Push almost certainly failed (no upstream; not verified without network).
+- Per the owner's decision: saved as branch `sync-2026-11-03` (commit) and `stash@{0}` (CSV), and reset `final-submission` to `c6ea850`. Nothing deleted.
+
+### Step 1 — Safer, simpler sync
+- `cli.py` `sync`: the default now runs only `git pull --ff-only` (a failure is reported and the command continues) plus the imagery download. It never writes tracked files, commits, or pushes. New `--push` flag (maintainers) adds the previous behaviour: thermal-feature extraction, nowcast log/validation, analysis DB refresh, commit (`models/`, `data/forecast/`, `data/satellite/thermal_features.csv`) and push. Removed `--no-push`. The interactive menu now asks before pushing, defaulting to No.
+- `bootstrap.sh`/`bootstrap.ps1`: no longer push, because their `nimbus sync` call is now the safe default; comments updated. `bootstrap.ps1` gained `Assert-LastExitCode` after each of its 4 native commands (`$ErrorActionPreference` doesn't cover native exit codes). pwsh isn't installed here, so the .ps1 wasn't executed.
+- `commands.md` sync section rewritten.
+- Tests: `tests/test_sync.py` (7) — default makes no commit/add/push and no analysis writes; `--push` commits and pushes; a failed pull doesn't stop the download; `--no-push` is rejected; neither bootstrap pushes; every native command in the .ps1 is followed by an exit-code check. Pytest 56 passed; guard PASS.
+
+### Step 2 — One-line fixes for common failures
+- a. Every user-facing "no imagery" error already said `nimbus download` (step 11); re-verified, no `scripts/download_satellite_images.py` hints remain in user-facing messages.
+- b. One date parser: `weather/chatbot.py` `parse_date()` holds the existing `pd.to_datetime` / "Couldn't parse the date '…'" logic, previously copied three times in chatbot.py. It's now used by `get_rainfall_forecast`, `get_weather`, `get_satellite_image`, `thermal_estimate.predict_thermal_rainfall`, and `/api/satellite` (whose regex check stays as a path guard and uses the same wording). Removed the `fromisoformat` checks added in step 11. `cli._prompt_date` (interactive menu re-prompt loop) is unchanged.
+- c. `app.py`: 404/405 under `/api/` return JSON (`/api/year/abc`, `/api/unknown`, `GET /api/chat`); page routes keep HTML.
+- d. `chatbot.get_weather`: observed results gain `"method": "observed"` (additive; all other keys identical, asserted by test). CLI and map output unchanged.
+- e. `nimbus forecast --date` defaults to today.
+- Tests: +9 (`test_error_messages.py`: shared-parser equality across 4 callers, satellite bad-date bodies; `test_app.py`: JSON 404/405, HTML 404 for pages, observed additive key, `--date` default). Pytest 65 passed; guard PASS with the one allowed additive change.
+
+### Step 3 — Windows/portability hygiene
+- a. Already done in step 11 (`resource` optional in `scripts/benchmark.py` and `scripts/evaluate_forecast.py`, covered by `test_scripts_import_without_resource_module`). `peak_rss_mb = None` serializes as JSON `null`.
+- b. `weather/hardware.py` `_has_avx2()`:
+  - Windows: `ctypes.windll.kernel32.IsProcessorFeaturePresent(40)` (`PF_AVX2_INSTRUCTIONS_AVAILABLE`), returning `None` on any failure.
+  - Apple Silicon (`Darwin` + `arm64`): returns `True`, since the check gates the torch wheel and torch is native on arm64. `describe()` prints "n/a (Apple Silicon -- torch runs natively)" instead of "AVX2: yes".
+  - Linux `/proc/cpuinfo` and Intel-Mac `sysctl` paths are unchanged and checked first.
+- Tests: `tests/test_hardware.py` (9) — Linux yes/no, Windows yes/no (asserts feature id 40), Windows ctypes failure -> None, Apple Silicon (no sysctl call, describe label), Intel Mac yes/no via sysctl, unknown OS -> None. Not run on real Windows or macOS. Pytest 74 passed; guard PASS.
+
+### Step 4 — Single source of dependencies
+- `requirements.txt` regenerated from `uv.lock` via `uv export --frozen --no-hashes --no-emit-project`: all 58 pins including transitive deps and pytest, platform markers kept, header "Generated from uv.lock; do not edit". `pyproject.toml` and `uv.lock` unchanged.
+- **Deviation from the request:** exported *without* `--extra torch`. Including torch in the pip install would crash the server ("Illegal instruction", not catchable) on CPUs without AVX2 the first time a forecast routes to the satellite model, which is the stated i3 target. The previous file excluded it for this reason. The pinned torch install line is kept as a comment, at the lock's version. Adding `--extra torch` to the export command is a one-flag change if wanted.
+- Tests: `tests/test_requirements.py` (4) — every pin equals uv.lock; core deps present and torch absent; torch hint version equals uv.lock; header present. Pytest 78 passed; guard PASS.
+
+### Step 5 — Remove clutter, proven safe
+- Deleted `scripts/extract.py` and `data/rainfall/rainfall_2023.json` (7.5 MB). Evidence: every runtime reader of `data/rainfall/` builds `rainfall_{year}.csv` (`features.py:52`, `chatbot.py:298,328,337`, `evaluate_forecast.py:49`, `nc_convert.py:139`). No `.json` path is built anywhere, and `web/*.html` fetch neither file (2023 is inlined; other years come from `/api/year/<y>` built from `.nc`). The only references were the extractor itself and one self-describing line each in README and `commands.md`; those lines were removed.
+- Added `LICENSE` (MIT, 2026, Kommera Sachit Reddy).
+- Added `.python-version` = **3.13, not 3.12 as requested**. Only 3.13 is installed here, so a 3.12 pin would make every `uv sync` download Python 3.12 and rebuild the venv (a network download, and a different runtime from the one all tests and QA ran on). 3.13 satisfies `requires-python >=3.12`.
+- `data/satellite/thermal_features.csv` was already tracked (step 11).
+- Tests: `tests/test_repo_hygiene.py` (4) — MIT license text; pin satisfies requires-python; thermal features tracked; deleted files absent and unreferenced. Pytest 82 passed; guard PASS.
+- Note: during this step `uv sync --frozen --extra torch` reported reinstalling torch. It was present for the step-4 run (no skips), no outside process was running, and the reflog showed no new activity, so the cause is unknown. Torch imports fine afterwards.
+
+### Step 6 — Faster first use
+- `cli.py` `serve`: `_warm_up()` loads the 14.5M-row rainfall history, the forecaster booster + climatology, and the newest-date cache before `app.main()`, printing "Loading…" then "Models ready (N s)". Any exception becomes a warning and the server still starts (lazy loading, as before). Importing `app` does not warm up, so tests and the test client are unaffected.
+- Measured: startup to ready 9.7 s ("Models ready (9 s)"); **first** `/api/forecast` request 0.52 s (was ~12.7 s cold); second 0.10 s.
+- Tests: `tests/test_serve.py` (3) — warm-up runs before `app.main` in order; a failing warm-up warns and still serves; reloading `app` triggers no load. Pytest 85 passed; guard PASS.
+
+### Step 7 — README + quick start
+- README restructured. The top is now:
+  - a 3-command **Quick start** (install uv -> `uv sync --frozen --extra torch` -> `uv run nimbus forecast --place Mumbai --date 2026-01-05`, with expected output `Mumbai, 2026-01-05: 0.87 mm (ML forecast)`);
+  - notes on Python ≥ 3.12, Windows uv install, no-AVX2 (drop `--extra torch`), satellite methods needing `nimbus download` (~9.6 GB), and `serve` preloading;
+  - **Running the tests**, a **7-line project layout**, a **table of all 16 scripts**, and **Other ways to install** (bootstrap, now non-pushing; pip from the generated requirements).
+- This replaced the 45-line structure listing and the step-11 setup block.
+- Command table: `forecast` date defaults to today; `sync` documents `--push`; `serve` mentions preloading.
+- "Keeping everything in sync" rewritten for `--push`. Limitations: the Windows/Apple Silicon torch bullet and the bootstrap.ps1 bullet updated to the new code; both are still not verified on real hardware.
+- Stale claims re-checked: RAM ~1.9/~3.7 GB, imagery ~9.6 GB, Windows "not verified", Ivy Bridge/Raspberry Pi "intended targets, not verified" (from step 11), and no "well under 1 GB", "~7 GB", "fully supported" or `--no-push` left.
+- New `scripts/quickstart.py` (stdlib only): uv check -> `uv sync --frozen --extra torch` (retry without torch) -> `uv run pytest -q` -> Mumbai forecast compared to the expected line; PASS/FAIL/SKIP per stage; exit code 0/1. Never runs git, `nimbus sync` or imagery downloads.
+- Tests: `tests/test_quickstart.py` (7) — all pass; torch retry; wrong forecast fails; missing uv fails and skips the rest; no git/push/download commands; expected line identical in script and README; stdlib-only imports. `test_repo_hygiene.py` +1 — README script table equals `scripts/*.py` (16) and documents `sync --push` and pytest. Pytest 93 passed; guard PASS.
+
+### Step 8 — Stranger test
+- Fresh clone of `final-submission` (9e22d46) into `/var/tmp/nimbus-stranger-GNua`, `VIRTUAL_ENV` unset, following only the README Quick start:
+  1. `curl … install.sh | sh`: **skipped** (network installer; uv 0.12.5 already installed).
+  2. `uv sync --frozen --extra torch`: 1.0 s (uv cache warm; a cold install downloads ~1 GB of wheels, not measured).
+  3. `uv run nimbus forecast --place Mumbai --date 2026-01-05`: 15.5 s -> `Mumbai, 2026-01-05: 0.87 mm (ML forecast)`, **exactly the documented output**.
+- Also from the README: `uv run pytest -q` -> 93 passed (8.5 s); `uv run python scripts/quickstart.py` -> 4× PASS (16.6 s).
+- Mismatches: none. No tracked file was modified by any command.
+- `git diff 19ae3c9 HEAD --stat -- models/` is not empty: it lists the two files *added* in the hardening pass (`models/benchmark.json`, `models/forecast_eval_report.json`). No existing model, metrics, climatology or analysis file differs from 19ae3c9.

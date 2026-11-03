@@ -57,20 +57,36 @@ def _cpu_mhz():
     return None
 
 
+PF_AVX2_INSTRUCTIONS_AVAILABLE = 40  # winnt.h processor-feature id for IsProcessorFeaturePresent
+
+
 def _has_avx2():
-    """True/False if determinable, None if unknown (treated as "not safe to assume")."""
+    """True/False if determinable, None if unknown (treated as "not safe to assume").
+
+    What callers actually need is "is the torch CPU wheel safe here?", so Apple
+    Silicon answers True: it has no AVX2, but torch ships native arm64 macOS
+    wheels and the AVX2 crash risk doesn't apply."""
     try:
         with open("/proc/cpuinfo") as f:
             return "avx2" in f.read().lower()
     except FileNotFoundError:
         pass
-    if platform.system() == "Darwin":
+    system = platform.system()
+    if system == "Darwin" and platform.machine() == "arm64":
+        return True
+    if system == "Darwin":
         try:
             out = subprocess.run(["sysctl", "-a"], capture_output=True, text=True, timeout=2)
             if out.returncode == 0:
                 return "avx2" in out.stdout.lower()
         except Exception:
             pass
+    if system == "Windows":
+        try:
+            import ctypes
+            return bool(ctypes.windll.kernel32.IsProcessorFeaturePresent(PF_AVX2_INSTRUCTIONS_AVAILABLE))
+        except Exception:
+            return None
     return None
 
 
@@ -163,6 +179,8 @@ def detect():
 def describe(info):
     mhz_str = f"~{info['mhz']:.0f} MHz" if info["mhz"] else "clock speed unknown"
     avx2_str = {True: "yes", False: "no", None: "couldn't determine"}[info["avx2"]]
+    if info["arch"] == "arm64" and info["avx2"]:
+        avx2_str = "n/a (Apple Silicon -- torch runs natively)"
     ram_str = f"{info['ram_gb']} GB" if info["ram_gb"] is not None else "unknown"
     swap_str = f"{info['swap_gb']} GB" if info["swap_gb"] is not None else "unknown"
     return (

@@ -426,6 +426,17 @@ def get_rainfall(place, start_date, end_date=None):
     return result
 
 
+def parse_date(date_str):
+    """The one parser for user-supplied dates (CLI, API, chatbot tools, thermal
+    estimate): returns (Timestamp, None), or (None, {"error": ...}) with the
+    same "Couldn't parse the date" message everywhere -- including impossible
+    calendar dates like 2026-02-30."""
+    try:
+        return pd.to_datetime(date_str), None
+    except (ValueError, TypeError):
+        return None, {"error": f"Couldn't parse the date '{date_str}'."}
+
+
 def get_rainfall_forecast(place, date_str):
     """Predict rainfall for a future date, via weather.forecast_model. Reuses
     resolve_place/nearest_cell so a place resolves to the same grid cell as
@@ -436,10 +447,9 @@ def get_rainfall_forecast(place, date_str):
     if resolved is None:
         return {"error": f"Couldn't find an Indian state, union territory, or city matching '{place}'."}
 
-    try:
-        target_date = pd.to_datetime(date_str)
-    except (ValueError, TypeError):
-        return {"error": f"Couldn't parse the date '{date_str}'."}
+    target_date, error = parse_date(date_str)
+    if error:
+        return error
 
     grid_lat, grid_lon = nearest_cell(resolved["lat"], resolved["lon"])
     result = predict_rainfall(grid_lat, grid_lon, target_date)
@@ -539,14 +549,17 @@ def get_weather(place, date_str):
     rainfall for a date within the historical record, otherwise a forecast. Powers
     the map page's date lookup and the CLI's `forecast` command, so both agree with
     what the chatbot would say for the same place/date."""
-    try:
-        target_date = pd.to_datetime(date_str).normalize()
-    except (ValueError, TypeError):
-        return {"error": f"Couldn't parse the date '{date_str}'."}
+    target_date, error = parse_date(date_str)
+    if error:
+        return error
+    target_date = target_date.normalize()
 
     last_available = _last_available_date()
     if last_available is not None and target_date <= last_available:
-        return get_rainfall(place, date_str, date_str)
+        result = get_rainfall(place, date_str, date_str)
+        if "error" not in result:
+            result["method"] = "observed"  # so every /api/forecast answer says what produced it
+        return result
     return get_rainfall_forecast(place, date_str)
 
 
@@ -560,10 +573,9 @@ def get_satellite_nowcast():
 
 
 def get_satellite_image(date_str):
-    try:
-        d = pd.to_datetime(date_str)
-    except (ValueError, TypeError):
-        return {"error": f"Couldn't parse the date '{date_str}'."}
+    d, error = parse_date(date_str)
+    if error:
+        return error
 
     date_key = str(d.date())
     path = SATELLITE_DIR / date_key[:4] / f"{date_key}.png"

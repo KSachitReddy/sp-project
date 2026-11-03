@@ -19,25 +19,39 @@
 #                             print page-file guidance if RAM is low
 #                             (Windows manages its page file differently
 #                             from Linux swap -- no automatic changes here)
-#   3. nimbus sync         -- pull latest models/analysis, fetch new satellite
-#                             imagery (progress bar), validate, commit + push
+#   3. nimbus sync         -- fast-forward pull + fetch new satellite imagery
+#                             (progress bar, ~10 GB first time); never commits
+#                             or pushes (that needs `nimbus sync --push`)
 #   4. nimbus serve         -- launch the app
 #
 # Safe to re-run any time -- every step is idempotent.
 
 $ErrorActionPreference = "Stop"
 
+# $ErrorActionPreference doesn't apply to native commands like uv, so check
+# each one's exit code explicitly -- the equivalent of bootstrap.sh's `set -e`.
+function Assert-LastExitCode($step) {
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "$step failed (exit code $LASTEXITCODE) -- stopping."
+        exit $LASTEXITCODE
+    }
+}
+
 Write-Host "=== [1/4] Installing dependencies ==="
 uv sync
+Assert-LastExitCode "uv sync"
 
 Write-Host ""
 Write-Host "=== [2/4] Detecting hardware, configuring accordingly ==="
 uv run nimbus setup --yes
+Assert-LastExitCode "nimbus setup"
 
 Write-Host ""
 Write-Host "=== [3/4] Syncing data (satellite imagery, models, analysis) ==="
 uv run nimbus sync
+Assert-LastExitCode "nimbus sync"
 
 Write-Host ""
 Write-Host "=== [4/4] Starting the app ==="
 uv run nimbus serve
+Assert-LastExitCode "nimbus serve"

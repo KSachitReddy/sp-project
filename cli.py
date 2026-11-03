@@ -14,7 +14,8 @@ Unified CLI for Nimbus -- AI Predictive Weather Analysis.
     uv run nimbus image --date 2023-08-15               # view a downloaded satellite image
     uv run nimbus nowcast                               # satellite-based CNN prediction for tomorrow
     uv run nimbus chat                                  # talk to the AI assistant, right in the terminal
-    uv run nimbus sync                                  # pull, fetch new imagery, validate, commit + push
+    uv run nimbus sync                                  # fast-forward + fetch new imagery (never commits)
+    uv run nimbus sync --push                           # maintainers: also refresh derived state, commit + push
     uv run nimbus serve                                 # launch the map + chatbot web app
 """
 import json
@@ -198,7 +199,7 @@ def train(model):
 @cli.command()
 @click.option("--place", required=True, help="An Indian state, union territory, or city, e.g. 'Kerala'.")
 @click.option(
-    "--date", "date_str", required=True,
+    "--date", "date_str", default=lambda: date.today().isoformat(), show_default="today",
     help="YYYY-MM-DD. Dates already in the historical record (2018-2025) return observed "
          "rainfall; later dates return a forecast.",
 )
@@ -351,25 +352,33 @@ def chat(model):
 
 
 @cli.command()
-@click.option("--no-push", is_flag=True, help="Commit locally but don't push to the remote.")
-def sync(no_push):
-    """Pull the latest committed models/analysis state, fetch any new
-    satellite imagery, check today's nowcast prediction against real data as
-    it becomes available, refresh the analysis database, then commit (and by
-    default push) the results back to the repo. Run this whenever you open
-    the project.
+@click.option("--push", is_flag=True,
+              help="Maintainer mode: also refresh derived state (thermal features, nowcast log, "
+                   "analysis DB), commit models/, data/forecast/ and thermal features, and push.")
+def sync(push):
+    """Fast-forward to the latest committed state and fetch any new satellite
+    imagery. That's all the default does -- it never writes tracked files,
+    commits, or pushes, so it's safe to run any time.
+
+    With --push (maintainers only): additionally extract thermal features from
+    the new imagery, log today's nowcast prediction, validate earlier ones
+    against real data, refresh the analysis database, then commit and push.
 
     Satellite images themselves are never committed (data/satellite/ stays
-    gitignored -- multi-GB of regenerable PNGs don't belong in git); only the
-    small derived state (models/, data/forecast/) is synced through git.
+    gitignored -- multi-GB of regenerable PNGs don't belong in git).
     """
-    from weather import analysis
-
-    click.echo("=== Pulling latest committed state ===")
-    subprocess.call(["git", "pull"])
+    click.echo("=== Pulling latest committed state (fast-forward only) ===")
+    if subprocess.call(["git", "pull", "--ff-only"]) != 0:
+        click.echo("git pull --ff-only failed (no remote, or local commits) -- continuing with the local copy.")
 
     click.echo("=== Checking for new satellite imagery ===")
     subprocess.call([sys.executable, str(SCRIPTS_DIR / "download_satellite_images.py")])
+
+    if not push:
+        click.echo("Done. Nothing was committed or pushed (use --push for the maintainer refresh).")
+        return
+
+    from weather import analysis
 
     click.echo("=== Extracting thermal features from any new imagery ===")
     subprocess.call([sys.executable, str(SCRIPTS_DIR / "extract_thermal_features.py")])
@@ -400,18 +409,15 @@ def sync(no_push):
     click.echo(f"{n} place/year/month rows.")
 
     click.echo("=== Committing ===")
-    subprocess.call(["git", "add", "models/", "data/forecast/"])
+    subprocess.call(["git", "add", "models/", "data/forecast/", "data/satellite/thermal_features.csv"])
     commit = subprocess.run(
         ["git", "commit", "-m", f"Automated sync: {date.today().isoformat()}"],
         capture_output=True, text=True,
     )
     click.echo(commit.stdout.strip() or commit.stderr.strip())
     if commit.returncode == 0:
-        if no_push:
-            click.echo("Skipped push (--no-push).")
-        else:
-            click.echo("=== Pushing ===")
-            subprocess.call(["git", "push"])
+        click.echo("=== Pushing ===")
+        subprocess.call(["git", "push"])
 
 
 @cli.command()
@@ -419,7 +425,30 @@ def serve():
     """Launch the Flask map + chatbot web app at http://127.0.0.1:5050."""
     import app
 
+    _warm_up()
     app.main()
+
+
+def _warm_up():
+    """Load the rainfall history and forecaster before serving, so the first
+    forecast request isn't the ~12 s cold one. Only `nimbus serve` does this
+    (importing app stays cheap); a failure here is a warning, not fatal --
+    the app would just load lazily on first request, as before."""
+    import time
+
+    click.echo("Loading rainfall history and models (about 10 s)...")
+    start = time.time()
+    try:
+        from weather import chatbot, features, forecast_model
+
+        features.load_rainfall()  # the full 14.5M-row history -- the slow part
+        if forecast_model.model_available():
+            forecast_model._load()
+        chatbot._last_available_date()
+    except Exception as e:  # noqa: BLE001 -- serving must not depend on the warm-up
+        click.echo(f"Warning: warm-up failed ({e!r}); the first request will be slow.", err=True)
+        return
+    click.echo(f"Models ready ({time.time() - start:.0f} s).")
 
 
 def _prompt_date(label="Date", default=None):
@@ -490,8 +519,8 @@ def _menu_chat(ctx):
 
 
 def _menu_sync(ctx):
-    push = click.confirm("Push to remote after committing?", default=True)
-    ctx.invoke(sync, no_push=not push)
+    push = click.confirm("Also refresh derived state, commit and push (maintainers only)?", default=False)
+    ctx.invoke(sync, push=push)
 
 
 def _menu_serve(ctx):

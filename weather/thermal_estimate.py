@@ -11,7 +11,6 @@ stuck behind any lag, because it never depends on IMD's own rainfall feed
 at inference time, only at training time.
 """
 import json
-from datetime import date
 from pathlib import Path
 
 import lightgbm as lgb
@@ -43,10 +42,11 @@ def predict_thermal_rainfall(date_str):
     """Same-day estimated rainfall (mm) per macro-region, from that day's
     thermal satellite image -- or {"error": ...} if there's no trained model
     or no thermal image for that date."""
-    try:
-        date.fromisoformat(date_str)
-    except (ValueError, TypeError):
-        return {"error": f"Invalid date '{date_str}' -- expected a real calendar date as YYYY-MM-DD."}
+    from weather.chatbot import parse_date  # lazy: chatbot pulls in the LLM clients
+
+    _, error = parse_date(date_str)
+    if error:
+        return error
     if not model_available():
         return {"error": "Thermal rainfall estimate model not trained yet -- run scripts/calibrate_thermal_rainfall.py."}
 
