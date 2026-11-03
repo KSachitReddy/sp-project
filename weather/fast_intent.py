@@ -102,8 +102,18 @@ def try_fast_reply(text):
         result = chatbot.get_rainfall_forecast(place["name"], str(target))
         if "error" in result:
             return None  # e.g. a historical date phrased as "will it rain" -- let the LLM sort it out
-        caveat = "" if result["method"] == "ml_short_range" else " (historical average, not a real forecast)"
-        return f"{result['matched_place']}, {result['target_date']}: {result['predicted_mm']} mm{caveat}", []
+        caveat = {
+            "ml_short_range": "",
+            "satellite_nowcast": f" (satellite nowcast from the {result.get('image_date')} image, "
+                                 f"{result.get('region')} India regional average)",
+            "satellite_thermal": f" (same-day thermal satellite estimate, {result.get('region')} India regional average)",
+        }.get(result["method"], " (historical average, not a real forecast)")
+        reply = f"{result['matched_place']}, {result['target_date']}: {result['predicted_mm']} mm{caveat}"
+        if "latest_satellite_nowcast" in result:
+            latest = result["latest_satellite_nowcast"]
+            reply += (f"\nNo satellite image covers that date yet -- the latest satellite nowcast is "
+                      f"{latest['predicted_mm']} mm across {result['region']} India on {latest['predicted_date']}.")
+        return reply, []
 
     result = chatbot.get_rainfall(place["name"], str(target), str(target))
     if "error" in result:

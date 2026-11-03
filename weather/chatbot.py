@@ -186,8 +186,13 @@ given day; and you can report real computed trend/anomaly statistics for a place
 - get_rainfall_forecast, for a specific place and a date AFTER 2025-12-31 (i.e. not covered by
   get_rainfall). Gives a real short-range ML forecast for roughly the first two weeks past the
   historical record, and a climatology-based (historical-average-for-this-time-of-year) estimate
-  beyond that — its 'method' field says which. Always state plainly which kind of estimate it is:
-  a real forecast, or a seasonal/climatological average, never blur the two together.
+  beyond that — its 'method' field says which. Past that two-week window, it automatically uses
+  satellite imagery when it covers the date: 'satellite_nowcast' (a CNN reading the previous day's
+  satellite image) or 'satellite_thermal' (that same day's thermal image) — both are averages for
+  the place's macro-region, not the exact place. Always state plainly which kind of estimate it is
+  (ML forecast, satellite nowcast, thermal satellite estimate, or seasonal/climatological average),
+  never blur them together, and pass on its 'note' — including any latest satellite nowcast it
+  mentions for nearby dates.
 - get_satellite_nowcast, ONLY for a question with no named place that asks specifically about
   tomorrow (e.g. "will it rain tomorrow?"). Takes no arguments. Predicts tomorrow's mean rainfall
   per macro-region of India (north/south/east/west/central/northeast) from today's actual satellite
@@ -438,9 +443,84 @@ def get_rainfall_forecast(place, date_str):
 
     grid_lat, grid_lon = nearest_cell(resolved["lat"], resolved["lon"])
     result = predict_rainfall(grid_lat, grid_lon, target_date)
+    if "error" not in result and result["method"] == "climatology_outlook":
+        result = _satellite_estimate(result, grid_lat, grid_lon, target_date.normalize())
     if "error" not in result:
         result["matched_place"] = resolved["name"]
         result["place_type"] = resolved["type"]
+    return result
+
+
+def _satellite_estimate(result, grid_lat, grid_lon, target_date):
+    """IMD's gridded rainfall lags ~a year, so past the short-range ML window the
+    rainfall data alone can only give climatology. Satellite imagery is current,
+    though: if the CNN nowcast (yesterday's image -> this date) or the thermal
+    estimate (this date's own image) covers the target date, use that instead.
+    Both are macro-region means, not place-specific, and the result says so."""
+    from weather import satellite_features as sfeat  # lazy: PIL/numpy, only needed past the ML window
+
+    region = sfeat.region_for(grid_lat, grid_lon)
+    date_key = str(target_date.date())
+    climatology_mm = result["predicted_mm"]
+    base = {
+        "target_date": date_key,
+        "grid_cell": result["grid_cell"],
+        "region": region,
+        "climatology_mm": climatology_mm,
+    }
+
+    try:
+        from weather.nowcast_model import predict_nowcast  # lazy: torch is an optional install
+    except ImportError:
+        predict_nowcast = None
+
+    if predict_nowcast is not None:
+        nowcast = predict_nowcast(as_of_date=target_date - pd.Timedelta(days=1))
+        if nowcast.get("predicted_date") == date_key:
+            return {
+                **base,
+                "predicted_mm": nowcast["predicted_mm_by_region"][region],
+                "method": "satellite_nowcast",
+                "image_date": nowcast["image_date"],
+                "note": (
+                    f"Satellite nowcast: a CNN read the {nowcast['image_date']} satellite image and "
+                    f"predicted the mean rainfall across {region} India for {date_key}. It's a regional "
+                    f"average, not specific to this exact place; the historical average here for this "
+                    f"time of year is {climatology_mm} mm."
+                ),
+            }
+
+    from weather.thermal_estimate import predict_thermal_rainfall
+
+    thermal = predict_thermal_rainfall(date_key)
+    if region in thermal.get("predicted_mm_by_region", {}):
+        return {
+            **base,
+            "predicted_mm": thermal["predicted_mm_by_region"][region],
+            "method": "satellite_thermal",
+            "image_date": date_key,
+            "note": (
+                f"Same-day satellite estimate: derived from cloud-top temperatures in the {date_key} "
+                f"thermal satellite image, as the mean rainfall across {region} India. It's a regional "
+                f"average, not specific to this exact place; the historical average here for this "
+                f"time of year is {climatology_mm} mm."
+            ),
+        }
+
+    # No satellite model reaches this date (e.g. more than a day ahead of the
+    # newest image) -- keep climatology, but if the date is only a few days out,
+    # point at the freshest real signal too.
+    if predict_nowcast is not None:
+        latest = predict_nowcast()
+        near = "error" not in latest and abs((target_date - pd.Timestamp(latest["predicted_date"])).days) <= 3
+        if near:
+            mm = latest["predicted_mm_by_region"][region]
+            result["region"] = region
+            result["latest_satellite_nowcast"] = {"predicted_date": latest["predicted_date"], "predicted_mm": mm}
+            result["note"] += (
+                f" No satellite image covers {date_key} yet; the most recent satellite nowcast predicts "
+                f"{mm} mm across {region} India on {latest['predicted_date']}."
+            )
     return result
 
 

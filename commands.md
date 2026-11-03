@@ -222,6 +222,12 @@ small derived state goes through git.
 Launches the Flask app — map at `/`, chatbot at `/chat` — on
 `http://127.0.0.1:5050`.
 
+The map page's **Satellite Nowcast** card shows the CNN's prediction for
+tomorrow per region (with each region's typical backtest error), and
+"Show on map" paints the map with it. Needs torch and a satellite image
+from the last week -- run `nimbus download` (or `nimbus sync`) first if
+the card says no recent image is on disk.
+
 ```bash
 uv run nimbus serve
 ```

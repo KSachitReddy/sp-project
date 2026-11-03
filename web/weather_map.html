@@ -705,6 +705,50 @@
   }
   .satellite-caption b{ color: var(--ink-secondary); font-weight: 600; }
 
+  /* ---------- Nowcast panel ---------- */
+  .nowcast-dates{
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--ink-secondary);
+    margin: 0 0 12px;
+    line-height: 1.6;
+  }
+  .nowcast-dates.is-error{ color: var(--ink); font-weight: 600; }
+  .nowcast-bars{ display: flex; flex-direction: column; gap: 8px; }
+  .nowcast-row{
+    display: grid;
+    grid-template-columns: 74px 1fr auto;
+    align-items: center;
+    gap: 10px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--ink-secondary);
+  }
+  .nowcast-track{
+    height: 8px;
+    border-radius: 4px;
+    background: var(--surface-raised);
+    overflow: hidden;
+  }
+  .nowcast-fill{
+    height: 100%;
+    border-radius: 4px;
+    background: var(--accent);
+  }
+  .nowcast-val{ color: var(--ink); text-align: right; white-space: nowrap; }
+  .nowcast-val small{ color: var(--ink-muted); font-size: 10px; }
+  .nowcast-toggle{
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 14px;
+    font-size: 12px;
+    color: var(--ink-secondary);
+    cursor: pointer;
+  }
+  .nowcast-toggle input{ accent-color: var(--accent); }
+  .nowcast-toggle input:disabled + span{ opacity: 0.5; }
+
   /* ---------- Tooltip ---------- */
   .tooltip{
     position: fixed;
@@ -862,6 +906,17 @@
           <div class="satellite-empty" id="satelliteEmpty">No satellite image<br>available for this date</div>
         </div>
         <p class="satellite-caption" id="satelliteCaption">—</p>
+      </div>
+
+      <div class="panel-card">
+        <h2>Satellite Nowcast · Tomorrow</h2>
+        <p class="nowcast-dates" id="nowcastDates">Running the satellite model…</p>
+        <div class="nowcast-bars" id="nowcastBars"></div>
+        <label class="nowcast-toggle">
+          <input type="checkbox" id="nowcastToggle" disabled />
+          <span>Show on map</span>
+        </label>
+        <p class="legend-note">A CNN reads the latest satellite image and predicts each region's mean rainfall for the next day. ± is the typical error from the held-out 2025 backtest.</p>
       </div>
 
       <div class="panel-card">
@@ -1041,6 +1096,11 @@
   var activeDroplets = [];
 
   function renderDay(dayIndex){
+    // Any scrub/play/year change returns the map to observed data.
+    if (nowcastMode){
+      nowcastMode = false;
+      nowcastToggleEl.checked = false;
+    }
     var dayVals = rainfall[dayIndex];
     baseCtx.clearRect(0, 0, LOGICAL_W, LOGICAL_H);
     activeDroplets = [];
@@ -1103,11 +1163,162 @@
     satelliteCaptionEl.innerHTML = 'NASA GIBS (MODIS/VIIRS true-colour) · <b>' + dateStr + '</b>';
   }
 
+  // ---------------- Satellite nowcast panel ----------------
+  // Backed by /api/nowcast (weather/nowcast_model.py): a CNN that turns the
+  // latest satellite image into tomorrow's mean rainfall for six macro-regions.
+  // "Show on map" paints every land cell with its region's predicted value.
+  var NOWCAST_REGIONS = ['north', 'northeast', 'west', 'central', 'east', 'south'];
+  var NOWCAST_LABELS = {
+    north: 'North', northeast: 'Northeast', west: 'West',
+    central: 'Central', east: 'East', south: 'South'
+  };
+  // Regional means are far smaller than single-cell totals, so the map uses
+  // its own (still square-root) scale in nowcast mode instead of DOMAIN_MAX.
+  var NOWCAST_DOMAIN_MAX = 20;
+  var nowcastData = null;
+  var nowcastMode = false;
+  var nowcastToggleEl = document.getElementById('nowcastToggle');
+  var nowcastDatesEl = document.getElementById('nowcastDates');
+  var nowcastBarsEl = document.getElementById('nowcastBars');
+  var cellRegions = null;      // region name per cell, rebuilt per dataset
+  var regionLabelPos = {};     // pixel centroid per region, for map labels
+
+  // Mirrors weather/satellite_features.py:region_for -- keep the two in sync.
+  function regionFor(lat, lon){
+    if (lat >= 22 && lon >= 88) return 'northeast';
+    if (lat >= 26) return 'north';
+    if (lat < 15) return 'south';
+    if (lon < 77) return 'west';
+    if (lon < 85) return 'central';
+    return 'east';
+  }
+
+  function rebuildCellRegions(){
+    cellRegions = new Array(N_CELLS);
+    var sums = {};
+    for (var i = 0; i < N_CELLS; i++){
+      var r = regionFor(cells[i][0], cells[i][1]);
+      cellRegions[i] = r;
+      var s = sums[r] || (sums[r] = { x: 0, y: 0, n: 0 });
+      s.x += cellPxX[i]; s.y += cellPxY[i]; s.n++;
+    }
+    regionLabelPos = {};
+    Object.keys(sums).forEach(function(r){
+      regionLabelPos[r] = { x: sums[r].x / sums[r].n + CELL_PX / 2, y: sums[r].y / sums[r].n + CELL_PX / 2 };
+    });
+  }
+
+  function nowcastColor(v){
+    var c = Math.min(Math.max(v, 0), NOWCAST_DOMAIN_MAX);
+    var rgb = rampRGB(Math.sqrt(c / NOWCAST_DOMAIN_MAX));
+    return 'rgb(' + (rgb[0]|0) + ',' + (rgb[1]|0) + ',' + (rgb[2]|0) + ')';
+  }
+
+  function fmtDate(iso){
+    return new Date(iso + 'T00:00:00').toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+  }
+
+  function renderNowcastMap(){
+    var preds = nowcastData.predicted_mm_by_region;
+    baseCtx.clearRect(0, 0, LOGICAL_W, LOGICAL_H);
+    activeDroplets = [];
+    var total = 0, wettest = null;
+    for (var i = 0; i < N_CELLS; i++){
+      var v = preds[cellRegions[i]];
+      total += v;
+      baseCtx.fillStyle = nowcastColor(v);
+      baseCtx.fillRect(cellPxX[i], cellPxY[i], CELL_PX + 0.6, CELL_PX + 0.6);
+    }
+    NOWCAST_REGIONS.forEach(function(r){
+      if (wettest === null || preds[r] > preds[wettest]) wettest = r;
+    });
+    document.getElementById('statAvg').textContent = (total / N_CELLS).toFixed(1) + ' mm';
+    document.getElementById('statMax').textContent = NOWCAST_LABELS[wettest] + ' ' + preds[wettest].toFixed(1) + ' mm';
+    document.getElementById('statRainy').textContent = '—';
+    document.getElementById('dateBig').textContent = fmtDate(nowcastData.predicted_date);
+    document.getElementById('dateSub').textContent = 'Nowcast from ' + nowcastData.image_date + ' image';
+    updateSatellite(nowcastData.image_date);
+  }
+
+  function drawNowcastLabels(){
+    var preds = nowcastData.predicted_mm_by_region;
+    var styles = getComputedStyle(document.body);
+    overlayCtx.textAlign = 'center';
+    overlayCtx.textBaseline = 'middle';
+    overlayCtx.shadowColor = 'rgba(0,0,0,0.9)';
+    overlayCtx.shadowBlur = 6;
+    NOWCAST_REGIONS.forEach(function(r){
+      var p = regionLabelPos[r];
+      if (!p) return;
+      overlayCtx.font = '600 16px ' + styles.getPropertyValue('--font-mono');
+      overlayCtx.fillStyle = '#ffffff';
+      overlayCtx.fillText(preds[r].toFixed(1) + ' mm', p.x, p.y - 8);
+      overlayCtx.font = '600 11px ' + styles.getPropertyValue('--font-body');
+      overlayCtx.fillStyle = '#e7e7e9';
+      overlayCtx.fillText(NOWCAST_LABELS[r], p.x, p.y + 10);
+    });
+    overlayCtx.shadowBlur = 0;
+  }
+
+  function renderNowcastPanel(){
+    var preds = nowcastData.predicted_mm_by_region;
+    var mae = nowcastData.test_mae_by_region || {};
+    var maxV = Math.max(1, Math.max.apply(null, NOWCAST_REGIONS.map(function(r){ return preds[r]; })));
+    nowcastDatesEl.className = 'nowcast-dates';
+    nowcastDatesEl.innerHTML = 'For <b>' + fmtDate(nowcastData.predicted_date) + '</b> · from the ' +
+      nowcastData.image_date + ' satellite image';
+    nowcastBarsEl.innerHTML = '';
+    NOWCAST_REGIONS.forEach(function(r){
+      var row = document.createElement('div');
+      row.className = 'nowcast-row';
+      var name = document.createElement('span');
+      name.textContent = NOWCAST_LABELS[r];
+      var track = document.createElement('div');
+      track.className = 'nowcast-track';
+      var fill = document.createElement('div');
+      fill.className = 'nowcast-fill';
+      fill.style.width = (preds[r] / maxV * 100) + '%';
+      track.appendChild(fill);
+      var val = document.createElement('span');
+      val.className = 'nowcast-val';
+      val.innerHTML = preds[r].toFixed(1) + ' mm' + (r in mae ? ' <small>±' + mae[r].toFixed(1) + '</small>' : '');
+      row.appendChild(name); row.appendChild(track); row.appendChild(val);
+      nowcastBarsEl.appendChild(row);
+    });
+    nowcastToggleEl.disabled = false;
+  }
+
+  function loadNowcast(){
+    fetch('api/nowcast')
+      .then(function(res){ return res.json().then(function(body){ return { ok: res.ok, body: body }; }); })
+      .then(function(result){
+        if (!result.ok) throw new Error((result.body && result.body.error) || 'Nowcast unavailable.');
+        nowcastData = result.body;
+        renderNowcastPanel();
+      })
+      .catch(function(err){
+        nowcastDatesEl.className = 'nowcast-dates is-error';
+        nowcastDatesEl.textContent = friendlyError(err);
+      });
+  }
+
+  nowcastToggleEl.addEventListener('change', function(){
+    if (!nowcastData) return;
+    if (nowcastToggleEl.checked){
+      setPlaying(false);
+      renderNowcastMap();
+      nowcastMode = true;
+    } else {
+      renderDay(state.dayIndex);
+    }
+  });
+
   // ---------------- Overlay animation loop ----------------
   var reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   function drawOverlay(ts){
     overlayCtx.clearRect(0, 0, LOGICAL_W, LOGICAL_H);
+    if (nowcastMode){ drawNowcastLabels(); return; }
     var t = ts / 1000;
     for (var i = 0; i < activeDroplets.length; i++){
       var d = activeDroplets[i];
@@ -1341,10 +1552,16 @@
       tooltip.classList.remove('visible');
       return;
     }
-    var v = rainfall[state.dayIndex][idx];
     var lat = cells[idx][0], lon = cells[idx][1];
-    ttMm.textContent = (v === null ? 'no data' : v.toFixed(1) + ' mm');
-    ttLoc.textContent = lat.toFixed(2) + '°N, ' + lon.toFixed(2) + '°E';
+    if (nowcastMode){
+      var region = cellRegions[idx];
+      ttMm.textContent = nowcastData.predicted_mm_by_region[region].toFixed(1) + ' mm predicted';
+      ttLoc.textContent = NOWCAST_LABELS[region] + ' region mean · ' + lat.toFixed(2) + '°N, ' + lon.toFixed(2) + '°E';
+    } else {
+      var v = rainfall[state.dayIndex][idx];
+      ttMm.textContent = (v === null ? 'no data' : v.toFixed(1) + ' mm');
+      ttLoc.textContent = lat.toFixed(2) + '°N, ' + lon.toFixed(2) + '°E';
+    }
     tooltip.classList.add('visible');
     var tx = e.clientX + 16, ty = e.clientY + 16;
     var tw = tooltip.offsetWidth, th = tooltip.offsetHeight;
@@ -1389,6 +1606,7 @@
       cellPxY[i] = row * CELL_PX;
       cellIndexGrid[row * COLS + col] = i;
     }
+    rebuildCellRegions();
 
     mapFrame.style.aspectRatio = LOGICAL_W + ' / ' + LOGICAL_H;
     baseCtx = setupCanvas(baseCanvas);
@@ -1549,6 +1767,7 @@
   drawLegend();
   applyData(INITIAL_DATA);
   refreshYearList();
+  loadNowcast();
   requestAnimationFrame(mainLoop);
 
   window.addEventListener('resize', function(){
@@ -1893,7 +2112,11 @@
 
   function render(data){
     if ('predicted_mm' in data){
-      var method = data.method === 'ml_short_range' ? 'short-range ML forecast' : 'climatological average';
+      var method = {
+        ml_short_range: 'short-range ML forecast',
+        satellite_nowcast: 'satellite nowcast, ' + data.region + ' India average',
+        satellite_thermal: 'thermal satellite estimate, ' + data.region + ' India average'
+      }[data.method] || 'climatological average';
       var text = data.matched_place + ', ' + data.target_date + ': ' + data.predicted_mm + ' mm (' + method + ')';
       if (data.note) text += '\n' + data.note;
       setResult(text, 'ok');

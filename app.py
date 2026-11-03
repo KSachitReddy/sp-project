@@ -30,6 +30,7 @@ Local server for Nimbus -- AI Predictive Weather Analysis.
                                 given the running conversation and an optional
                                 'model' override.
 """
+import json
 import os
 import re
 import tempfile
@@ -146,6 +147,13 @@ def api_nowcast():
     result = predict_nowcast()
     if "error" in result:
         return jsonify(result), 400
+
+    # Attach the held-out 2025 backtest error per region, so the map can show
+    # how far off each number typically is rather than presenting it as exact.
+    metrics_path = BASE_DIR / "models" / "nowcast_model_metrics.json"
+    if metrics_path.exists():
+        test = json.loads(metrics_path.read_text()).get("by_split", {}).get("test_2025", {})
+        result["test_mae_by_region"] = {r: m["mae"] for r, m in test.items()}
     return jsonify(result)
 
 
