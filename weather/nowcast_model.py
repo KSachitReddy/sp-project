@@ -207,7 +207,7 @@ def predict_nowcast(as_of_date=None):
         return {
             "error": (
                 f"No satellite image on disk within a week of {as_of.date()} -- run "
-                f"scripts/download_satellite_images.py to fetch recent imagery."
+                f"`nimbus download` to fetch recent imagery."
             )
         }
 

@@ -34,6 +34,7 @@ import json
 import os
 import re
 import tempfile
+from datetime import date
 from pathlib import Path
 
 from flask import Flask, jsonify, request, send_from_directory
@@ -96,11 +97,15 @@ def api_year(year):
 def api_satellite(date_str):
     if not DATE_RE.match(date_str):
         return jsonify({"error": "Invalid date, expected YYYY-MM-DD."}), 400
+    try:
+        date.fromisoformat(date_str)
+    except ValueError:
+        return jsonify({"error": f"Invalid date '{date_str}' -- not a real calendar date."}), 400
 
     year_dir = SATELLITE_DIR / date_str[:4]
     filename = f"{date_str}.png"
     if not (year_dir / filename).exists():
-        return jsonify({"error": f"No satellite image for {date_str}."}), 404
+        return jsonify({"error": f"No satellite image for {date_str} -- run `nimbus download` to fetch imagery."}), 404
 
     return send_from_directory(year_dir, filename)
 

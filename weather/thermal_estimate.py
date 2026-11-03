@@ -11,6 +11,7 @@ stuck behind any lag, because it never depends on IMD's own rainfall feed
 at inference time, only at training time.
 """
 import json
+from datetime import date
 from pathlib import Path
 
 import lightgbm as lgb
@@ -42,6 +43,10 @@ def predict_thermal_rainfall(date_str):
     """Same-day estimated rainfall (mm) per macro-region, from that day's
     thermal satellite image -- or {"error": ...} if there's no trained model
     or no thermal image for that date."""
+    try:
+        date.fromisoformat(date_str)
+    except (ValueError, TypeError):
+        return {"error": f"Invalid date '{date_str}' -- expected a real calendar date as YYYY-MM-DD."}
     if not model_available():
         return {"error": "Thermal rainfall estimate model not trained yet -- run scripts/calibrate_thermal_rainfall.py."}
 
@@ -52,7 +57,7 @@ def predict_thermal_rainfall(date_str):
 
     fractions = tf.cold_fractions_multi_threshold(date_str, thresholds)
     if fractions is None:
-        return {"error": f"No thermal satellite image on disk for {date_str}."}
+        return {"error": f"No thermal satellite image on disk for {date_str} -- run `nimbus download` to fetch imagery."}
 
     booster = _load()
     predicted_mm_by_region = {}

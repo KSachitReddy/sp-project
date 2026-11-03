@@ -19,7 +19,8 @@ def client():
     ("/api/forecast?place=Xyzzyville&date=2030-01-05", 400),
     ("/api/analysis?place=Pune", 400),
     ("/api/analysis?place=Pune&year=1900", 400),
-    ("/api/satellite/2025-13-45", 404),
+    ("/api/satellite/2025-13-45", 400),
+    ("/api/satellite/2026-02-30", 400),
     ("/api/satellite/not-a-date", 400),
     ("/api/year/1999", 404),
 ])

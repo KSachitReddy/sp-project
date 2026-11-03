@@ -11,7 +11,10 @@ sizes, and the machine it ran on.
 """
 import json
 import platform
-import resource
+try:
+    import resource  # POSIX-only; absent on Windows
+except ImportError:
+    resource = None
 import statistics
 import sys
 import time
@@ -88,7 +91,7 @@ def main():
         "year_payload": bench(client, [f"/api/year/{y}" for y in (2023, 2024, 2025)]),
     }
     report["cnn_nowcast_inference"] = bench_cnn()
-    report["peak_rss_mb"] = round(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024)
+    report["peak_rss_mb"] = round(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024) if resource else None
     report["model_sizes_bytes"] = {p.name: p.stat().st_size for p in sorted(MODELS_DIR.iterdir())
                                    if p.suffix in (".txt", ".pt", ".csv")}
     info = hardware.detect()

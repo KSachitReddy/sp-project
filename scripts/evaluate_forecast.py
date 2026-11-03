@@ -16,7 +16,10 @@ Rows are rebuilt one year at a time on the training cell subsample (peak RAM
 that it reproduces forecast_model_metrics.json exactly.
 """
 import json
-import resource
+try:
+    import resource  # POSIX-only; absent on Windows
+except ImportError:
+    resource = None
 import sys
 import time
 from pathlib import Path
@@ -209,7 +212,7 @@ def main():
         f: round(float(g), 4) for f, g in sorted(zip(booster.feature_name(), gain / gain.sum()), key=lambda x: -x[1])
     }
     report["runtime_secs"] = round(time.time() - t0, 1)
-    report["peak_rss_mb"] = round(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024)
+    report["peak_rss_mb"] = round(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024) if resource else None
 
     REPORT_PATH.write_text(json.dumps(report, indent=2))
     h1 = report["by_split"]["test"]["1"]

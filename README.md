@@ -24,6 +24,8 @@ weather/
   nowcast_model.py          CNN satellite nowcaster: train/save/load/predict
   analysis.py                Real computed trend/anomaly stats (SQLite) + live nowcast validation log
   hardware.py                CPU/RAM/AVX2/swap detection, backing `nimbus setup`
+  thermal_features.py        Cold-cloud fractions per region from thermal imagery
+  thermal_estimate.py        Same-day thermal rainfall estimate (`nimbus thermal-estimate`)
 scripts/
   convert_all.py           Batch-convert every data/nc/*.nc into data/rainfall/*.csv
   extract.py                One-off extractor for the 2023 CSV + JSON
@@ -37,6 +39,11 @@ scripts/
   download_elevation.py           Elevation per grid cell -- terrain isn't used by either model yet
   download_climate_indices.py     ENSO / IOD / MJO -- large-scale monsoon drivers, not yet used by either model
   download_era5.py                Atmospheric reanalysis (temp/humidity/wind/pressure) -- needs your own CDS account
+  extract_thermal_features.py     Thermal imagery -> data/satellite/thermal_features.csv
+  calibrate_thermal_rainfall.py   Train the thermal rainfall estimate
+  evaluate_forecast.py            Extended forecaster evaluation -> models/forecast_eval_report.json
+  benchmark.py                    Latency/memory benchmark -> models/benchmark.json
+tests/                     pytest suite (`uv run pytest -q`)
 web/
   weather_map.html          The map page app.py serves
   chat.html                 The rainfall chatbot page app.py serves
@@ -56,23 +63,60 @@ commands.md                Full CLI reference — every command, every option
 
 ## Setup
 
-Fastest path -- one command, handles everything below automatically:
+### Quick start
+
+Requires **Python ≥ 3.12** (uv will fetch a suitable Python if you don't have one) and
+[uv](https://docs.astral.sh/uv/):
 
 ```bash
-./bootstrap.sh         # Linux / Mac
-.\bootstrap.ps1         # Windows (PowerShell -- see commands.md if it's blocked by execution policy)
+# 1. Install uv (once)
+curl -LsSf https://astral.sh/uv/install.sh | sh                                # Linux / macOS
+powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"   # Windows
+
+# 2. Install the exact locked dependencies (drop --extra torch on CPUs without AVX2)
+uv sync --frozen --extra torch
+
+# 3. Run the test suite (tests/ -- leakage, splits, labels, API error paths)
+uv run pytest -q
+
+# 4. First forecast
+uv run nimbus forecast --place Mumbai --date 2026-01-05
+# -> Mumbai, 2026-01-05: 0.87 mm (ML forecast)
 ```
 
-Manual/pip equivalent, if you'd rather not use `uv` or the wrapper script:
+Then `uv run nimbus serve` for the map and chat at `http://127.0.0.1:5050`. Other useful
+entry points:
+- `uv run nimbus thermal-estimate --date YYYY-MM-DD` gives a same-day estimate from
+  thermal imagery.
+- `uv run python scripts/evaluate_forecast.py` runs the extended forecaster evaluation.
+- `uv run python scripts/benchmark.py` measures latency and memory, writing
+  `models/benchmark.json`.
+
+**Satellite imagery is not in the repo.** In a fresh clone, forecasts for dates past the
+short-range ML window fall back to the historical average, and `nimbus nowcast`,
+`nimbus image` and `nimbus thermal-estimate` report that no image is on disk. Satellite
+nowcasts and thermal estimates only appear after you run `uv run nimbus download`
+(about 9.6 GB).
+
+### Maintainer sync (not for a first run)
+
+`bootstrap.sh` (Linux/macOS) and `bootstrap.ps1` (Windows) run `uv sync`,
+`nimbus setup --yes`, then **`nimbus sync`**, and finally `nimbus serve`.
+`nimbus sync` does a `git pull`, downloads about 10 GB of imagery, then
+**commits and pushes** to your git remote. Do not use these scripts for a first run;
+use the Quick start above.
+
+### pip alternative
 
 ```bash
-python3 -m venv .venv
+python3 -m venv .venv            # Debian/Ubuntu: needs `apt install python3-venv` first
 .venv/bin/pip install -r requirements.txt
 ```
 
 `requirements.txt` intentionally skips torch (see "Hardware requirements"
 below) -- the map, chatbot, and rainfall forecaster all run without it. Only
-the satellite nowcaster needs it.
+the satellite nowcaster needs it. It also skips pytest; use the uv path to run
+the tests.
 
 ## Command line
 
@@ -90,6 +134,7 @@ with every option and example: **[commands.md](commands.md)**.
 | `analyse` | Real computed trend/anomaly statistics (SQLite-backed) -- `--build` to precompute, then `--place X --year Y` or `--place X --trend START END`. |
 | `image --date Y` | Views a downloaded satellite image (prints the path, opens it in your default viewer). |
 | `nowcast` | Runs the satellite CNN directly -- tomorrow's predicted rainfall per macro-region. |
+| `thermal-estimate --date Y` | Same-day rainfall estimate per macro-region from that day's thermal satellite image (needs `download` first). |
 | `chat` | Talk to the AI assistant right in the terminal -- same pipeline as the web chat page. |
 | `sync` | Pulls the latest committed models/analysis, fetches new satellite imagery, validates past nowcast predictions against real data, commits and pushes the result. |
 | `serve` | Launches the Flask app (map + chatbot) at `http://127.0.0.1:5050`. |
@@ -97,10 +142,12 @@ with every option and example: **[commands.md](commands.md)**.
 ## Hardware requirements
 
 Everything except the satellite nowcaster is designed to run on modest,
-CPU-only hardware, verified across a real range -- from a dual-core Intel
-Ivy Bridge laptop (3rd-gen Core i3, 8 GB RAM) down to ~1GHz-class embedded
-hardware (Raspberry Pi, an old netbook). `nimbus setup` detects which tier
-your machine falls into and configures itself accordingly:
+CPU-only hardware. The intended targets range from a dual-core Intel Ivy Bridge
+laptop (3rd-gen Core i3, 8 GB RAM) down to ~1GHz-class embedded hardware
+(Raspberry Pi, an old netbook). These are intended targets, **not verified in
+final QA**, which ran on a 4-core Intel i5-6500 (AVX2, 7.7 GB RAM) under Linux.
+`nimbus setup` detects which tier your machine falls into and configures itself
+accordingly:
 
 - **CPU**: any x86_64 CPU, or ARM (Raspberry Pi-class). No GPU is used
   anywhere in this project. On ~1GHz-class hardware, train models on a
@@ -108,15 +155,23 @@ your machine falls into and configures itself accordingly:
   training/CNN inference there is impractical, but serving the already-
   trained models is cheap.
 - **RAM**: 8 GB is comfortable for the map, chatbot, and rainfall forecaster.
-  Budget roughly 3-4 GB for `ollama` running the recommended `llama3.2:3b`
-  model if you want the offline chatbot fallback; the rest (Flask, pandas,
-  the LightGBM model) fits in well under 1 GB. On a low-RAM machine, `nimbus
+  Measured peak RSS:
+  - `nimbus serve` and `nimbus forecast`: ~1.9 GB, mostly the cached 14.5M-row
+    rainfall history.
+  - Training the forecaster and `scripts/evaluate_forecast.py`: ~3.7 GB.
+  - Training the CNN: ~2.4 GB.
+  - Budget another 3-4 GB for `ollama` running the recommended `llama3.2:3b`
+    model if you want the offline chatbot fallback.
+  
+  On a 4 GB machine, serving fits only tightly and training needs swap. On a
+  low-RAM machine, `nimbus
   setup` offers to configure swap (Linux, with your confirmation -- it needs
   `sudo`) or gives page-file guidance (Windows, manual -- the mechanism is
   different enough there that this project won't auto-configure it).
 - **Disk**: ~56 MB for the tracked models/analysis database, plus the
-  rainfall CSVs/NetCDFs; add ~7 GB if you download the full satellite
-  imagery archive (optional, only needed for the nowcaster).
+  rainfall CSVs/NetCDFs; add ~9.6 GB if you download the full satellite
+  imagery archive (7.1 GB true-colour + 2.3 GB thermal; optional, only needed
+  for the nowcaster and thermal estimate).
 - **Satellite nowcaster (optional, skip it on older/ARM hardware)**: needs
   PyTorch, which has no 32-bit build and whose CPU wheel has a documented
   history of crashing with "Illegal instruction" on CPUs without AVX2 --
@@ -124,10 +179,10 @@ your machine falls into and configures itself accordingly:
   (Haswell). `nimbus setup` checks for AVX2 and only installs it if safe;
   the rest of the app works fine without it and `/api/nowcast` (or `nimbus
   nowcast`) degrades to a clear error instead of crashing anything.
-- **Windows**: fully supported -- `bootstrap.ps1`, hardware detection, and
-  every CLI command work the same way. Not yet verified on real Windows
-  hardware (built and reviewed carefully, but this project has mostly been
-  run on Linux); if something's off, that's the likeliest place.
+- **Windows**: **not verified**. Windows code paths exist (`bootstrap.ps1`, PowerShell
+  hardware detection, `os.startfile`) and were reviewed statically, but the project
+  has never been run on Windows. See "Limitations & honest results" for the known
+  gaps.
 
 ## Running the app
 
@@ -295,14 +350,25 @@ app now returns `satellite_nowcast` for some dates the CSV labels climatology.
 
 **Resources and platforms**
 
-- Peak RAM: the web server reaches about 2.0 GB once forecast data is cached.
-  Forecaster retraining peaks at 3.8 GB, `evaluate_forecast.py` at 3.5 GB, and CNN
-  training at 2.4 GB.
+- Peak RAM: the web server and `nimbus forecast` reach about 1.9 GB once forecast
+  data is cached. Forecaster retraining and `evaluate_forecast.py` peak at about
+  3.7 GB, and CNN training at 2.4 GB.
 - Latency: the first forecast request takes about 11 s while 14.5M rows load; after
   that, the median is about 90 ms (see `models/benchmark.json`).
 - Without torch, the app degrades cleanly (verified in a torch-less environment):
   `/api/nowcast` returns 503 and forecasts fall back to thermal or climatology.
-- **Not verified:** running on Windows, and on a real CPU without AVX2.
+- **Not verified:** running on Windows, on macOS, and on a real CPU without AVX2.
+- **Windows and Apple Silicon are never offered torch.** `_has_avx2()` in
+  `weather/hardware.py` checks only `/proc/cpuinfo` (Linux) and `sysctl` (macOS).
+  - On Windows it returns "unknown", so `nimbus setup` never offers the satellite
+    nowcaster, and a dual-core Windows machine is classed "minimal" and told not to
+    train. Install torch manually with `uv sync --extra torch` if your CPU has AVX2.
+  - On Apple Silicon, torch runs natively but the CPU has no AVX2, so setup skips
+    it. Install it manually the same way.
+- **`bootstrap.ps1` does not stop on failures.** It does not check `$LASTEXITCODE`,
+  and PowerShell's `$ErrorActionPreference = "Stop"` doesn't apply to native commands,
+  so a failed `uv sync` doesn't stop the script the way `set -e` stops
+  `bootstrap.sh`.
 
 **App behaviour to be aware of**
 

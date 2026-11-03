@@ -568,7 +568,7 @@ def get_satellite_image(date_str):
     date_key = str(d.date())
     path = SATELLITE_DIR / date_key[:4] / f"{date_key}.png"
     if not path.exists():
-        return {"error": f"No satellite image available for {date_key}."}
+        return {"error": f"No satellite image available for {date_key} -- run `nimbus download` to fetch imagery."}
 
     return {"date": date_key, "image_url": f"/api/satellite/{date_key}"}
 
