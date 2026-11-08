@@ -51,6 +51,7 @@ The suite in `tests/` covers:
 - API error paths;
 - safe `nimbus sync` defaults;
 - OS hardware detection;
+- missing `uv`/`git` and rate-limited elevation downloads;
 - `requirements.txt` vs `uv.lock` drift.
 
 It runs in about 6 s and needs no imagery or network.
@@ -166,10 +167,13 @@ accordingly:
   (Haswell). `nimbus setup` checks for AVX2 and only installs it if safe;
   the rest of the app works fine without it and `/api/nowcast` (or `nimbus
   nowcast`) degrades to a clear error instead of crashing anything.
-- **Windows**: **not verified**. Windows code paths exist (`bootstrap.ps1`, PowerShell
-  hardware detection, `os.startfile`) and were reviewed statically, but the project
-  has never been run on Windows. See "Limitations & honest results" for the known
-  gaps.
+- **Windows**: **partially verified, under Wine only** (no real Windows machine was
+  available). Windows CPython 3.13 installs every pinned wheel from `requirements.txt`,
+  and the Windows-specific code runs: hardware detection through the Win32 API,
+  `nimbus setup`, `nimbus --help`, and `sync` without git. numpy itself can't be
+  imported under Wine 10 (a Wine gap, `ucrtbase.crealf`), so forecasting, the web app
+  and most tests were **not** exercised on Windows. See
+  [docs/final_qa.md](docs/final_qa.md).
 
 ## Running the app
 
@@ -344,7 +348,8 @@ app now returns `satellite_nowcast` for some dates the CSV labels climatology.
   that, the median is about 90 ms (see `models/benchmark.json`).
 - Without torch, the app degrades cleanly (verified in a torch-less environment):
   `/api/nowcast` returns 503 and forecasts fall back to thermal or climatology.
-- **Not verified:** running on Windows, on macOS, and on a real CPU without AVX2.
+- **Not verified:** running on real Windows (only Wine; see
+  [docs/final_qa.md](docs/final_qa.md)), on macOS, and on a real CPU without AVX2.
 - **Torch detection on Windows and Apple Silicon is untested on real hardware.**
   `nimbus setup` checks AVX2 on Windows with `IsProcessorFeaturePresent`, and treats
   Apple Silicon as torch-capable (native arm64 wheels). Both paths are unit-tested with

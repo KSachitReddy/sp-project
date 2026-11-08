@@ -21,6 +21,7 @@ Unified CLI for Nimbus -- AI Predictive Weather Analysis.
 import json
 import os
 import platform
+import shutil
 import subprocess
 import sys
 from datetime import date
@@ -85,15 +86,20 @@ def setup(yes):
             click.echo("torch is already installed.")
         except ImportError:
             if yes or click.confirm("Run `uv sync --extra torch` now to enable it?", default=True):
-                subprocess.call(["uv", "sync", "--extra", "torch"])
+                if _call(["uv", "sync", "--extra", "torch"]) == 127:
+                    click.echo(
+                        "Install torch yourself instead (pip install route):\n"
+                        "  pip install torch==2.13.0 --index-url https://download.pytorch.org/whl/cpu"
+                    )
 
     click.echo()
-    ram, swap = info["ram_gb"], info["swap_gb"] or 0
+    ram, swap = info["ram_gb"], info["swap_gb"]
     is_windows = platform.system() == "Windows"
-    if ram is not None and ram <= 8 and swap < 8:
+    swap_name = "page file" if is_windows else "swap"
+    if ram is not None and ram <= 8 and (swap is None or swap < 8):
         click.echo(
-            f"RAM is {ram} GB with only {swap} GB of "
-            + ("page file" if is_windows else "swap")
+            f"RAM is {ram} GB with "
+            + (f"only {swap} GB of {swap_name}" if swap is not None else f"an undetected amount of {swap_name}")
             + ". A low-RAM machine running Ollama and Flask together can hit an "
             "out-of-memory situation with no cushion -- this happened during this "
             "project's own development and took down the IDE, not just the app."
@@ -367,9 +373,14 @@ def sync(push):
     Satellite images themselves are never committed (data/satellite/ stays
     gitignored -- multi-GB of regenerable PNGs don't belong in git).
     """
+    if push and shutil.which("git") is None:
+        click.echo("Error: --push needs git, which was not found on PATH.", err=True)
+        raise SystemExit(1)
+
     click.echo("=== Pulling latest committed state (fast-forward only) ===")
-    if subprocess.call(["git", "pull", "--ff-only"]) != 0:
-        click.echo("git pull --ff-only failed (no remote, or local commits) -- continuing with the local copy.")
+    if _call(["git", "pull", "--ff-only"]) != 0:
+        click.echo("git pull --ff-only failed (git missing, no remote, or local commits) -- "
+                   "continuing with the local copy.")
 
     click.echo("=== Checking for new satellite imagery ===")
     subprocess.call([sys.executable, str(SCRIPTS_DIR / "download_satellite_images.py")])
@@ -449,6 +460,16 @@ def _warm_up():
         click.echo(f"Warning: warm-up failed ({e!r}); the first request will be slow.", err=True)
         return
     click.echo(f"Models ready ({time.time() - start:.0f} s).")
+
+
+def _call(cmd):
+    """subprocess.call that reports a program missing from PATH (e.g. uv on the
+    pip install route, git in a ZIP download) instead of crashing; returns 127."""
+    try:
+        return subprocess.call(cmd)
+    except FileNotFoundError:
+        click.echo(f"`{cmd[0]}` was not found on PATH.", err=True)
+        return 127
 
 
 def _prompt_date(label="Date", default=None):
@@ -542,7 +563,7 @@ MENU = [
     ("7", "Nowcast tomorrow's rainfall (CNN)", _menu_nowcast),
     ("8", "Thermal same-day rainfall estimate", _menu_thermal_estimate),
     ("9", "Chat with the AI assistant", _menu_chat),
-    ("10", "Sync (pull, download, validate, commit+push)", _menu_sync),
+    ("10", "Sync (pull + new imagery; optional maintainer commit+push)", _menu_sync),
     ("11", "Serve the web app", _menu_serve),
     ("12", "Hardware setup", _menu_setup),
 ]

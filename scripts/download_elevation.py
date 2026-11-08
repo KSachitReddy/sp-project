@@ -34,11 +34,28 @@ REQUEST_DELAY_SEC = 1.0  # be polite to a free public service
 REQUEST_TIMEOUT_SEC = 30
 
 
+MAX_RETRIES = 4  # the public API rate-limits (HTTP 429) after a few dozen requests
+
+
 def _fetch_batch(cells):
     payload = {"locations": [{"latitude": float(la), "longitude": float(lo)} for la, lo in cells]}
-    resp = requests.post(API_URL, json=payload, timeout=REQUEST_TIMEOUT_SEC)
+    for attempt in range(MAX_RETRIES + 1):
+        resp = requests.post(API_URL, json=payload, timeout=REQUEST_TIMEOUT_SEC)
+        if resp.status_code != 429 or attempt == MAX_RETRIES:
+            break
+        time.sleep(REQUEST_DELAY_SEC * 5 * 2 ** attempt)  # 5, 10, 20, 40 s
     resp.raise_for_status()
     return resp.json()["results"]
+
+
+def _merge_with_existing(new_df, path):
+    """Keep previously downloaded cells that this run failed to fetch, so a
+    partial (rate-limited) run never shrinks a complete elevation.csv."""
+    if not path.exists():
+        return new_df
+    old = pd.read_csv(path)
+    merged = pd.concat([new_df, old], ignore_index=True)
+    return merged.drop_duplicates(subset=["latitude", "longitude"], keep="first")
 
 
 def main():
@@ -67,10 +84,12 @@ def main():
 
     OUT_PATH.parent.mkdir(parents=True, exist_ok=True)
     df = pd.DataFrame(rows).drop_duplicates(subset=["latitude", "longitude"])
+    df = _merge_with_existing(df, OUT_PATH).sort_values(["latitude", "longitude"])
     df.to_csv(OUT_PATH, index=False)
-    print(f"Wrote {len(df)}/{len(cells)} grid cells to {OUT_PATH}")
+    print(f"Wrote {len(df)}/{len(cells)} grid cells to {OUT_PATH} ({len(rows)} fetched this run)")
     if failed_batches:
-        print(f"{failed_batches} batch(es) failed -- re-run later to retry (safe: just overwrites this same file).")
+        print(f"{failed_batches} batch(es) failed -- re-run later to retry "
+              "(safe: cells already on disk are kept, never dropped).")
 
 
 if __name__ == "__main__":
